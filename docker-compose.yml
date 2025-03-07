@@ -1,4 +1,3 @@
-
 services:
   db:
     image: postgres:17
@@ -30,11 +29,43 @@ services:
       - ./.env
     volumes:
       - ./backend:/app
+      - media_volume:/app/media
     ports:
       - "8000:8000"
-    command: python manage.py runserver 0.0.0.0:8000
+    command: python manage.py runserver 0.0.0.0:8000 --nothreading
+    # User is already set in Dockerfile
+
+  celery_worker:
+    build: ./backend
+    restart: always
+    depends_on:
+      - db
+      - redis
+      - backend
+    env_file:
+      - ./.env
+    volumes:
+      - ./backend:/app
+      - media_volume:/app/media
+    command: watchmedo auto-restart --directory=/app --pattern=*.py --recursive -- celery -A core worker -l INFO
+    # Explicitly set UID for celery worker
+  
+  celery_beat:
+    build: ./backend
+    restart: always
+    depends_on:
+      - db
+      - redis
+      - backend
+      - celery_worker
+    env_file:
+      - ./.env
+    volumes:
+      - celery_beat_data:/app/celerybeat
+    command: celery -A core beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
 volumes:
   postgres_data:
   redis_data:
-
+  celery_beat_data:
+  media_volume:

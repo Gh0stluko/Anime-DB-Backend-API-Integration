@@ -17,3 +17,4 @@ Pillow==11.1.0
 requests==2.32.0
 python-dotenv==1.0.1
 drf-yasg==1.21.9
+watchdog==3.0.0

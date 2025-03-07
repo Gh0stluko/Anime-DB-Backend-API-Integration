@@ -9,11 +9,23 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc python3-dev libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Create a non-root user to run our services
+RUN adduser --disabled-password --gecos "" animeuser \
+    && mkdir -p /app/media \
+    && chown -R animeuser:animeuser /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Make sure the app directory is writable by the non-root user
+RUN chown -R animeuser:animeuser /app
+
+# Switch to non-root user
+USER animeuser
+
 EXPOSE 8000
 
+# Default command is still gunicorn, but will be overridden by docker-compose
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "core.wsgi:application"]
