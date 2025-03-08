@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.utils.html import format_html
+from django.utils.html import format_html, mark_safe
 from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.urls import path
@@ -53,7 +53,7 @@ class DubbingStudioAdmin(admin.ModelAdmin):
 
 @admin.register(Anime)
 class AnimeAdmin(admin.ModelAdmin):
-    list_display = ('title_ukrainian', 'title_japanese', 'year', 'status', 'type', 'episodes_count', 'has_ukrainian_dub', 'display_poster', 'rating', 'seasons_count')
+    list_display = ('title_ukrainian', 'display_japanese_title', 'year', 'status', 'type', 'episodes_count', 'has_ukrainian_dub', 'display_poster', 'rating', 'seasons_count')
     list_filter = ('status', 'type', 'year', 'has_ukrainian_dub', 'dubbing_studios')
     search_fields = ('title_ukrainian', 'title_original', 'title_english', 'title_japanese')
     prepopulated_fields = {'slug': ('title_ukrainian',)}
@@ -191,6 +191,18 @@ class AnimeAdmin(admin.ModelAdmin):
             return f"Помилка: {str(e)}"
         return "Немає трейлера"
     display_trailer.short_description = 'Трейлер'
+    
+    def display_japanese_title(self, obj):
+        """Display Japanese title with proper font styling"""
+        if obj.title_japanese:
+            return mark_safe(f'<span lang="ja" style="font-family: \'Noto Sans JP\', sans-serif;">{obj.title_japanese}</span>')
+        return "-"
+    display_japanese_title.short_description = 'Японська назва'
+    
+    class Media:
+        css = {
+            'all': ('https://fonts.googleapis.com/css2?family=Noto+Sans+JP&display=swap',)
+        }
 
 @admin.register(Season)
 class SeasonAdmin(admin.ModelAdmin):

@@ -5,8 +5,13 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Install system dependencies including Node.js
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc python3-dev libpq-dev \
+    && apt-get install -y --no-install-recommends \
+    gcc python3-dev libpq-dev \
+    curl gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user to run our services

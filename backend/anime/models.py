@@ -148,6 +148,11 @@ class Anime(models.Model):
 
     def __str__(self):
         return self.title_ukrainian
+    
+    # Добавляем специальный метод для отображения японского названия
+    def get_japanese_title(self):
+        """Return proper encoded Japanese title"""
+        return self.title_japanese if self.title_japanese else ""
 
     class Meta:
         ordering = ['-year', 'title_ukrainian']

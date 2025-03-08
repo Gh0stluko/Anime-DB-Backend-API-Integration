@@ -5,7 +5,7 @@ django-filter==24.3
 django-environ==0.12.0
 gunicorn==23.0.0
 psycopg2-binary==2.9.10
-django-allauth==0.58.0
+django-allauth==65.4.1
 djangorestframework-simplejwt==5.4.0
 social-auth-app-django==5.4.3
 redis==5.2.1
@@ -14,7 +14,7 @@ django-celery-beat==2.7.0
 elasticsearch-dsl==8.17.1
 django-elasticsearch-dsl==8.0.0
 Pillow==11.1.0
-requests==2.32.0
+requests==2.32.3
 python-dotenv==1.0.1
 drf-yasg==1.21.9
 watchdog==3.0.0

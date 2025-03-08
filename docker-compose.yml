@@ -3,6 +3,7 @@ services:
     image: postgres:17
     volumes:
       - postgres_data:/var/lib/postgresql/data/
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
     env_file:
       - ./.env
     environment:
@@ -11,6 +12,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
       - "5432:5432"
+    command: postgres -c 'config_file=/etc/postgresql/postgresql.conf'
 
   redis:
     image: redis:latest

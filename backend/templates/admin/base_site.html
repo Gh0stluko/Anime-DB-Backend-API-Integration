@@ -1,0 +1,41 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% trans 'Anime Admin' %}{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">{% trans 'Anime Administration' %}</h1>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+    /* Ensure proper display of Japanese text */
+    @charset "UTF-8";
+    
+    [lang="ja"], 
+    .field-title_japanese input,
+    .field-title_japanese textarea,
+    td.field-display_japanese_title {
+        font-family: 'Noto Sans JP', sans-serif !important;
+        font-size: 1.1em;
+        font-weight: 500;
+    }
+    
+    /* Force browser to use proper font for these characters */
+    td.field-display_japanese_title span[lang="ja"] {
+        display: inline-block;
+        padding: 2px 0;
+        font-feature-settings: "palt";
+        letter-spacing: 0.02em;
+    }
+    
+    /* Dark mode better visibility for Japanese text */
+    @media (prefers-color-scheme: dark) {
+        td.field-display_japanese_title span[lang="ja"] {
+            text-shadow: 0 0 0.5px rgba(255,255,255,0.2);
+        }
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,27 @@
+/* Custom styles for Django admin */
+
+/* Japanese font from Google Fonts for better CJK character rendering */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+
+/* Apply proper font for Japanese text */
+[lang="ja"], 
+.field-title_japanese input,
+.field-title_japanese textarea,
+td.field-display_japanese_title {
+    font-family: 'Noto Sans JP', sans-serif !important;
+    font-size: 1.1em;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+/* Improve readability of Japanese text */
+td.field-display_japanese_title {
+    padding: 8px 5px;
+    letter-spacing: 0.02em;
+}
+
+/* Ensure proper character display in form fields */
+.field-title_japanese input,
+.field-title_japanese textarea {
+    font-feature-settings: "palt";
+}
