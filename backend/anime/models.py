@@ -118,12 +118,30 @@ class Anime(models.Model):
         if not self.banner_url and self.banner and hasattr(self.banner, 'url'):
             self.banner_url = self.banner.url
             
-        # Add truncation for slug to prevent errors with very long titles
-        if not self.slug:
-            base_slug = slugify(self.title_ukrainian)
+        # Fix for empty slug issue - ensure we always have a non-empty slug
+        if not self.slug or self.slug.strip() == '':
+            if self.title_ukrainian and self.title_ukrainian.strip():
+                base_slug = slugify(self.title_ukrainian)
+            elif self.title_english and self.title_english.strip():
+                base_slug = slugify(self.title_english)
+            elif self.title_original and self.title_original.strip():
+                base_slug = slugify(self.title_original)
+            else:
+                # As a last resort, use the ID or a timestamp if this is a new record
+                import time
+                base_slug = f"anime-{int(time.time())}"
+                
             # Ensure the slug is not too long (max 250 chars to be safe)
             if len(base_slug) > 250:
                 base_slug = base_slug[:250]
+                
+            # Ensure the slug is unique by appending a counter if needed
+            original_slug = base_slug
+            counter = 1
+            while Anime.objects.filter(slug=base_slug).exclude(pk=self.pk).exists():
+                base_slug = f"{original_slug[:245]}-{counter}"
+                counter += 1
+                
             self.slug = base_slug
             
         super().save(*args, **kwargs)
@@ -136,9 +154,33 @@ class Anime(models.Model):
         verbose_name = 'Аніме'
         verbose_name_plural = 'Аніме'
 
+class Season(models.Model):
+    anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name='seasons')
+    number = models.IntegerField('Номер сезону')
+    title = models.CharField('Назва сезону', max_length=255, blank=True)
+    year = models.IntegerField('Рік виходу', blank=True, null=True)
+    episodes_count = models.IntegerField('Кількість епізодів', default=0)
+    
+    class Meta:
+        ordering = ['anime', 'number']
+        verbose_name = 'Сезон'
+        verbose_name_plural = 'Сезони'
+        unique_together = ['anime', 'number']
+    
+    def __str__(self):
+        if self.title:
+            return f"{self.anime.title_ukrainian} - Сезон {self.number}: {self.title}"
+        return f"{self.anime.title_ukrainian} - Сезон {self.number}"
+    
+    def update_episodes_count(self):
+        self.episodes_count = self.episodes.count()
+        self.save(update_fields=['episodes_count'])
+
 class Episode(models.Model):
     anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name='episodes')
+    season = models.ForeignKey(Season, on_delete=models.CASCADE, related_name='episodes', null=True, blank=True)
     number = models.IntegerField('Номер епізоду')
+    absolute_number = models.IntegerField('Загальний номер', blank=True, null=True)
     title = models.CharField('Назва епізоду', max_length=255, blank=True)
     description = models.TextField('Опис', blank=True)
     duration = models.IntegerField('Тривалість (хв)')
@@ -171,16 +213,27 @@ class Episode(models.Model):
         if not self.thumbnail_url and self.thumbnail and hasattr(self.thumbnail, 'url'):
             self.thumbnail_url = self.thumbnail.url
             
+        # Update the episode count for the season if applicable
         super().save(*args, **kwargs)
+        if self.season:
+            self.season.update_episodes_count()
     
     def __str__(self):
-        return f"{self.anime.title_ukrainian} - Епізод {self.number}"
+        season_text = f"S{self.season.number}" if self.season else ""
+        return f"{self.anime.title_ukrainian} {season_text} - Епізод {self.number}: {self.title}" if self.title else f"{self.anime.title_ukrainian} {season_text} - Епізод {self.number}"
+    
+    def display_thumbnail(self):
+        if self.thumbnail_url:
+            return self.thumbnail_url
+        elif self.thumbnail and hasattr(self.thumbnail, 'url'):
+            return self.thumbnail.url
+        return None
     
     class Meta:
-        ordering = ['anime', 'number']
+        ordering = ['anime', 'season', 'number']
         verbose_name = 'Епізод'
         verbose_name_plural = 'Епізоди'
-        unique_together = ['anime', 'number']
+        unique_together = ['anime', 'season', 'number']
 
 class AnimeScreenshot(models.Model):
     anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name='screenshots')
@@ -204,6 +257,13 @@ class AnimeScreenshot(models.Model):
     
     def __str__(self):
         return f"Скріншот для {self.anime.title_ukrainian}"
+    
+    def display_image(self):
+        if self.image_url:
+            return self.image_url
+        elif self.image and hasattr(self.image, 'url'):
+            return self.image.url
+        return None
     
     class Meta:
         verbose_name = 'Скріншот'

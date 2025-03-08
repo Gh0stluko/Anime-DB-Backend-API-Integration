@@ -174,6 +174,10 @@ ELASTICSEARCH_DSL = {
     },
 }
 
+# Налаштування перекладу
+GOOGLE_TRANSLATE_CREDENTIALS = env('GOOGLE_TRANSLATE_CREDENTIALS', default=None)
+DEEPL_API_KEY = env('DEEPL_API_KEY', default=None)
+
 # Enhanced Logging Configuration
 LOGGING = {
     'version': 1,

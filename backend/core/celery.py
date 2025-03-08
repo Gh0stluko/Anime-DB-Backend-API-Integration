@@ -32,12 +32,7 @@ app.conf.beat_schedule = {
     'fetch-seasonal-anime-weekly': {
         'task': 'anime.tasks.fetch_seasonal_anime_task',
         'schedule': crontab(day_of_week=1, hour=4, minute=0),  # Run weekly on Monday at 4:00 AM
-    },
-    'fetch-popular-anilist-weekly': {
-        'task': 'anime.tasks.fetch_popular_anilist_anime_task',
-        'schedule': crontab(day_of_week=2, hour=4, minute=0),  # Run weekly on Tuesday at 4:00 AM
-        'args': (1, 50),  # page 1, per_page 50
-    },
+    }
 }
 
 # Add error signal handlers for better debugging
