@@ -4,8 +4,9 @@ from django.utils.text import slugify
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Genre(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True)
+    name = models.CharField('Оригінальна назва', max_length=100, unique=True)
+    name_ukrainian = models.CharField('Українська назва', max_length=100, blank=True)
+    description = models.TextField('Опис', blank=True)
     slug = models.SlugField(unique=True, blank=True, max_length=255)  # Increased length
 
     def save(self, *args, **kwargs):
@@ -14,6 +15,8 @@ class Genre(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
+        if self.name_ukrainian:
+            return f"{self.name_ukrainian} ({self.name})"
         return self.name
 
     class Meta:
@@ -102,6 +105,9 @@ class Anime(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Add duration per episode field
+    duration_per_episode = models.IntegerField('Тривалість епізоду (хв)', default=24)
+
     def save(self, *args, **kwargs):
         # If migrating from old format to new, ensure poster_url contains a value
         if not hasattr(self, 'poster_url'):
@@ -159,34 +165,17 @@ class Anime(models.Model):
         verbose_name = 'Аніме'
         verbose_name_plural = 'Аніме'
 
-class Season(models.Model):
-    anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name='seasons')
-    number = models.IntegerField('Номер сезону')
-    title = models.CharField('Назва сезону', max_length=255, blank=True)
-    year = models.IntegerField('Рік виходу', blank=True, null=True)
-    episodes_count = models.IntegerField('Кількість епізодів', default=0)
-    
-    class Meta:
-        ordering = ['anime', 'number']
-        verbose_name = 'Сезон'
-        verbose_name_plural = 'Сезони'
-        unique_together = ['anime', 'number']
-    
-    def __str__(self):
-        if self.title:
-            return f"{self.anime.title_ukrainian} - Сезон {self.number}: {self.title}"
-        return f"{self.anime.title_ukrainian} - Сезон {self.number}"
-    
-    def update_episodes_count(self):
-        self.episodes_count = self.episodes.count()
-        self.save(update_fields=['episodes_count'])
+# Remove the Season model completely
 
 class Episode(models.Model):
     anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name='episodes')
-    season = models.ForeignKey(Season, on_delete=models.CASCADE, related_name='episodes', null=True, blank=True)
+    # Remove season field
     number = models.IntegerField('Номер епізоду')
+    # Keep absolute_number for convenience
     absolute_number = models.IntegerField('Загальний номер', blank=True, null=True)
     title = models.CharField('Назва епізоду', max_length=255, blank=True)
+    title_japanese = models.CharField('Японська назва епізоду', max_length=255, blank=True)
+    title_romanji = models.CharField('Романізована назва епізоду', max_length=255, blank=True)
     description = models.TextField('Опис', blank=True)
     duration = models.IntegerField('Тривалість (хв)')
     
@@ -201,6 +190,11 @@ class Episode(models.Model):
     
     # Ukrainian specific
     dubbing_studio = models.ForeignKey(DubbingStudio, on_delete=models.SET_NULL, null=True, blank=True, related_name='dubbed_episodes')
+    
+    # Episode metadata
+    is_filler = models.BooleanField('Філлер', default=False)
+    is_recap = models.BooleanField('Рекап', default=False)
+    score = models.FloatField('Оцінка', null=True, blank=True)
     
     # Release info
     release_date = models.DateField('Дата виходу', default=timezone.now)
@@ -217,15 +211,12 @@ class Episode(models.Model):
         # If we have a thumbnail image but no URL, try to get URL from the image
         if not self.thumbnail_url and self.thumbnail and hasattr(self.thumbnail, 'url'):
             self.thumbnail_url = self.thumbnail.url
-            
-        # Update the episode count for the season if applicable
+        
+        # No more season-related code here
         super().save(*args, **kwargs)
-        if self.season:
-            self.season.update_episodes_count()
     
     def __str__(self):
-        season_text = f"S{self.season.number}" if self.season else ""
-        return f"{self.anime.title_ukrainian} {season_text} - Епізод {self.number}: {self.title}" if self.title else f"{self.anime.title_ukrainian} {season_text} - Епізод {self.number}"
+        return f"{self.anime.title_ukrainian} - Епізод {self.number}: {self.title}" if self.title else f"{self.anime.title_ukrainian} - Епізод {self.number}"
     
     def display_thumbnail(self):
         if self.thumbnail_url:
@@ -235,10 +226,10 @@ class Episode(models.Model):
         return None
     
     class Meta:
-        ordering = ['anime', 'season', 'number']
+        ordering = ['anime', 'number']
         verbose_name = 'Епізод'
         verbose_name_plural = 'Епізоди'
-        unique_together = ['anime', 'season', 'number']
+        unique_together = ['anime', 'number']
 
 class AnimeScreenshot(models.Model):
     anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name='screenshots')

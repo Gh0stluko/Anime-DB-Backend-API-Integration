@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.urls import path
 from django.db.models import Count
-from .models import Anime, Episode, Genre, DubbingStudio, AnimeScreenshot, Season
+from .models import Anime, Episode, Genre, DubbingStudio, AnimeScreenshot
 from .tasks import fetch_top_anime_task, fetch_seasonal_anime_task, fetch_anime_details_task
 
 class EpisodeInline(admin.TabularInline):
@@ -12,18 +12,20 @@ class EpisodeInline(admin.TabularInline):
     extra = 1
     fields = ('number', 'title', 'duration', 'release_date', 'dubbing_studio', 'thumbnail_url', 'display_thumbnail_preview')
     readonly_fields = ('display_thumbnail_preview',)
+    show_change_link = True  # Add link to edit the episode
+    
+    # Make episodes collapsible and collapsed by default
+    classes = ('collapse',)
+    
+    # Control how many episodes are shown initially
+    max_num = 500
+    per_page = 20
     
     def display_thumbnail_preview(self, obj):
         if obj.thumbnail_url:
             return format_html('<img src="{}" width="80" height="45" style="object-fit: cover;" />', obj.thumbnail_url)
         return "Немає мініатюри"
     display_thumbnail_preview.short_description = 'Превью'
-
-class SeasonInline(admin.TabularInline):
-    model = Season
-    extra = 1
-    fields = ('number', 'title', 'year', 'episodes_count')
-    readonly_fields = ('episodes_count',)
 
 class ScreenshotInline(admin.TabularInline):
     model = AnimeScreenshot
@@ -41,9 +43,36 @@ class ScreenshotInline(admin.TabularInline):
 
 @admin.register(Genre)
 class GenreAdmin(admin.ModelAdmin):
-    list_display = ('name', 'slug')
-    search_fields = ('name',)
+    list_display = ('name', 'name_ukrainian', 'slug')
+    search_fields = ('name', 'name_ukrainian')
     prepopulated_fields = {'slug': ('name',)}
+    fields = ('name', 'name_ukrainian', 'description', 'slug')
+    actions = ['translate_to_ukrainian']
+    
+    def translate_to_ukrainian(self, request, queryset):
+        from anime.services.translation_service import TranslationService
+        
+        translated_count = 0
+        for genre in queryset.filter(name_ukrainian__exact=''):
+            try:
+                ukrainian_name = TranslationService.translate_text(genre.name, 'en', 'uk')
+                genre.name_ukrainian = ukrainian_name
+                genre.save(update_fields=['name_ukrainian'])
+                translated_count += 1
+            except Exception as e:
+                self.message_user(
+                    request, 
+                    f"Помилка перекладу жанру '{genre.name}': {str(e)}",
+                    messages.ERROR
+                )
+        
+        self.message_user(
+            request, 
+            f"Успішно перекладено {translated_count} жанрів на українську мову.", 
+            messages.SUCCESS
+        )
+    
+    translate_to_ukrainian.short_description = "Перекласти вибрані жанри на українську"
 
 @admin.register(DubbingStudio)
 class DubbingStudioAdmin(admin.ModelAdmin):
@@ -53,24 +82,20 @@ class DubbingStudioAdmin(admin.ModelAdmin):
 
 @admin.register(Anime)
 class AnimeAdmin(admin.ModelAdmin):
-    list_display = ('title_ukrainian', 'display_japanese_title', 'year', 'status', 'type', 'episodes_count', 'has_ukrainian_dub', 'display_poster', 'rating', 'seasons_count')
+    list_display = ('title_ukrainian', 'display_japanese_title', 'year', 'status', 'type', 'episodes_count', 'has_ukrainian_dub', 'display_poster', 'rating')
     list_filter = ('status', 'type', 'year', 'has_ukrainian_dub', 'dubbing_studios')
     search_fields = ('title_ukrainian', 'title_original', 'title_english', 'title_japanese')
     prepopulated_fields = {'slug': ('title_ukrainian',)}
-    readonly_fields = ('created_at', 'updated_at', 'display_trailer', 'display_poster_preview', 'display_banner_preview', 'display_screenshots_gallery')
+    readonly_fields = ('created_at', 'updated_at', 'display_trailer', 'display_poster_preview', 'display_banner_preview', 
+                      'display_screenshots_gallery', 'episodes_summary')
     filter_horizontal = ('genres', 'dubbing_studios')
-    inlines = [SeasonInline, ScreenshotInline]
+    inlines = [ScreenshotInline, EpisodeInline]  # Put EpisodeInline last since it's collapsible
     
     # Add actions buttons to the changelist view
     change_list_template = 'admin/anime/anime_changelist.html'
     
-    def seasons_count(self, obj):
-        return obj.seasons.count()
-    seasons_count.short_description = 'Сезони'
-    
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.annotate(seasons_count=Count('seasons', distinct=True))
+        return super().get_queryset(request)
     
     def get_urls(self):
         urls = super().get_urls()
@@ -122,6 +147,37 @@ class AnimeAdmin(admin.ModelAdmin):
         return "Немає скріншотів для цього аніме"
     display_screenshots_gallery.short_description = 'Галерея скріншотів'
     
+    def episodes_summary(self, obj):
+        """Display a summary of episodes with links to view/edit them"""
+        episodes = obj.episodes.all().order_by('number')
+        count = episodes.count()
+        
+        if count == 0:
+            return "Немає епізодів"
+            
+        html = f'<p>Всього епізодів: <strong>{count}</strong></p>'
+        html += '<div style="margin-bottom: 10px;">'
+        
+        # Add quick stats
+        filler_count = obj.episodes.filter(is_filler=True).count()
+        recap_count = obj.episodes.filter(is_recap=True).count()
+        with_thumbnail = obj.episodes.exclude(thumbnail_url='').count()
+        
+        if filler_count:
+            html += f'<span style="margin-right: 15px;"><b>Філлерів:</b> {filler_count}</span>'
+        if recap_count:
+            html += f'<span style="margin-right: 15px;"><b>Рекапів:</b> {recap_count}</span>'
+        html += f'<span><b>З мініатюрами:</b> {with_thumbnail}</span>'
+        
+        html += '</div>'
+        
+        # Add button to view all episodes separately
+        admin_url = f"/admin/anime/episode/?anime__id__exact={obj.id}"
+        html += f'<a href="{admin_url}" class="button" target="_blank">Переглянути всі епізоди окремо</a>'
+        
+        return format_html(html)
+    episodes_summary.short_description = 'Інформація про епізоди'
+    
     fieldsets = (
         ('Назви', {
             'fields': ('title_original', 'title_english', 'title_japanese', 'title_ukrainian', 'slug')
@@ -129,11 +185,15 @@ class AnimeAdmin(admin.ModelAdmin):
         ('Деталі', {
             'fields': ('description', 'poster_url', 'display_poster_preview', 'banner_url', 'display_banner_preview', 'youtube_trailer', 'display_trailer', 'genres')
         }),
+        ('Епізоди', {
+            'fields': ('episodes_summary',),
+            'description': 'Інформація про епізоди аніме. Для перегляду повного списку епізодів, натисніть на "Епізоди" внизу сторінки'
+        }),
         ('Скріншоти', {
             'fields': ('display_screenshots_gallery',),
         }),
         ('Класифікація', {
-            'fields': ('status', 'type', 'year', 'season', 'episodes_count', 'rating')
+            'fields': ('status', 'type', 'year', 'season', 'episodes_count', 'duration_per_episode', 'rating')
         }),
         ('Українська локалізація', {
             'fields': ('has_ukrainian_dub', 'dubbing_studios', 'ukrainian_release_date')
@@ -203,26 +263,14 @@ class AnimeAdmin(admin.ModelAdmin):
         css = {
             'all': ('https://fonts.googleapis.com/css2?family=Noto+Sans+JP&display=swap',)
         }
-
-@admin.register(Season)
-class SeasonAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'anime', 'number', 'year', 'episodes_count')
-    list_filter = ('anime', 'year')
-    search_fields = ('anime__title_ukrainian', 'title')
-    inlines = [EpisodeInline]
+        js = ('admin/js/collapse.js',)  # Ensure collapse functionality is available
 
 @admin.register(Episode)
 class EpisodeAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'anime', 'season_info', 'release_date', 'duration', 'dubbing_studio', 'display_thumbnail')
-    list_filter = ('anime', 'season', 'dubbing_studio', 'release_date')
+    list_display = ('__str__', 'anime', 'release_date', 'duration', 'dubbing_studio', 'display_thumbnail')
+    list_filter = ('anime', 'dubbing_studio', 'release_date', 'is_filler', 'is_recap')
     search_fields = ('anime__title_ukrainian', 'title', 'description')
     readonly_fields = ('created_at', 'updated_at', 'display_thumbnail_preview')
-    
-    def season_info(self, obj):
-        if obj.season:
-            return f"Сезон {obj.season.number}"
-        return "-"
-    season_info.short_description = 'Сезон'
     
     def display_thumbnail(self, obj):
         if obj.thumbnail_url:
@@ -238,13 +286,16 @@ class EpisodeAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Зв\'язки', {
-            'fields': ('anime', 'season')
+            'fields': ('anime',)
         }),
         ('Основна інформація', {
-            'fields': ('number', 'absolute_number', 'title', 'description', 'duration', 'thumbnail_url', 'display_thumbnail_preview')
+            'fields': ('number', 'absolute_number', 'title', 'title_japanese', 'title_romanji', 'description', 'duration', 'thumbnail_url', 'display_thumbnail_preview')
         }),
         ('Відео', {
             'fields': ('video_url_1080p', 'video_url_720p', 'video_url_480p')
+        }),
+        ('Додаткова інформація', {
+            'fields': ('is_filler', 'is_recap', 'score')
         }),
         ('Українська локалізація', {
             'fields': ('dubbing_studio',)

@@ -134,6 +134,64 @@ class JikanAPIFetcher:
                     time.sleep(delay)
                 else:
                     return None
+    
+    def fetch_anime_episodes(self, mal_id, page=1, retries=3, delay=2):
+        """Fetch episodes for a specific anime from Jikan API"""
+        url = f"{self.BASE_URL}/anime/{mal_id}/episodes?page={page}"
+        logger.info(f"Fetching episodes for anime ID {mal_id} from URL: {url}")
+        
+        for attempt in range(retries):
+            try:
+                response = self.session.get(url)
+                response.raise_for_status()
+                response_json = response.json()
+                
+                # Enhanced debugging output
+                logger.debug(f"Jikan API episodes response structure: {list(response_json.keys())}")
+                
+                if 'data' not in response_json:
+                    logger.error(f"Unexpected API response format for episodes. Keys: {list(response_json.keys())}")
+                    if 'error' in response_json:
+                        logger.error(f"API Error: {response_json['error']}")
+                    
+                    if attempt < retries - 1:
+                        logger.info(f"Retrying in {delay} seconds... (Attempt {attempt+1}/{retries})")
+                        time.sleep(delay)
+                        continue
+                    return [], None
+                
+                # Get pagination info for potential future requests
+                pagination = response_json.get('pagination', {})
+                has_next_page = pagination.get('has_next_page', False)
+                
+                return response_json['data'], pagination
+                
+            except requests.RequestException as e:
+                logger.error(f"Error fetching episodes for anime ID {mal_id}: {str(e)}")
+                if attempt < retries - 1:
+                    logger.info(f"Retrying in {delay} seconds... (Attempt {attempt+1}/{retries})")
+                    time.sleep(delay)
+                else:
+                    return [], None
+    
+    def fetch_all_anime_episodes(self, mal_id, max_pages=3, retries=3, delay=2):
+        """Fetch all episodes for a specific anime by making multiple paginated requests"""
+        all_episodes = []
+        page = 1
+        
+        while page <= max_pages:
+            episodes, pagination = self.fetch_anime_episodes(mal_id, page, retries, delay)
+            all_episodes.extend(episodes)
+            
+            if not pagination or not pagination.get('has_next_page', False):
+                break
+                
+            page += 1
+            # Add a small delay between requests to avoid rate limiting
+            time.sleep(1)
+        
+        logger.info(f"Fetched {len(all_episodes)} episodes for anime ID {mal_id}")
+        return all_episodes
 
 
 class AnilistAPIFetcher:
@@ -184,6 +242,11 @@ class AnilistAPIFetcher:
                         id
                         site
                         thumbnail
+                    }
+                    nextAiringEpisode {
+                        airingAt
+                        timeUntilAiring
+                        episode
                     }
                 }
             }
@@ -266,10 +329,22 @@ class AnilistAPIFetcher:
                     url
                     site
                 }
+                nextAiringEpisode {
+                    airingAt
+                    timeUntilAiring
+                    episode
+                }
                 trailer {
                     id
                     site
                     thumbnail
+                }
+                airingSchedule {
+                    nodes {
+                        episode
+                        airingAt
+                        timeUntilAiring
+                    }
                 }
             }
         }
@@ -302,6 +377,73 @@ class AnilistAPIFetcher:
                 return response_json['data']['Media']
             except requests.RequestException as e:
                 logger.error(f"Error fetching anime from Anilist by MAL ID {id_mal}: {str(e)}")
+                if attempt < retries - 1:
+                    logger.info(f"Retrying in {delay} seconds... (Attempt {attempt+1}/{retries})")
+                    time.sleep(delay)
+                else:
+                    return None
+
+    def fetch_anime_episodes(self, anilist_id, retries=3, delay=2):
+        """Fetch episodes for a specific anime from Anilist API"""
+        query = '''
+        query ($id: Int) {
+            Media(id: $id, type: ANIME) {
+                id
+                idMal
+                title {
+                    romaji
+                    english
+                    native
+                }
+                streamingEpisodes {
+                    title
+                    thumbnail
+                    url
+                    site
+                }
+                airingSchedule {
+                    nodes {
+                        episode
+                        airingAt
+                        timeUntilAiring
+                    }
+                }
+                nextAiringEpisode {
+                    airingAt
+                    timeUntilAiring
+                    episode
+                }
+            }
+        }
+        '''
+        
+        variables = {
+            'id': anilist_id
+        }
+        
+        for attempt in range(retries):
+            try:
+                response = requests.post(
+                    self.API_URL,
+                    json={'query': query, 'variables': variables}
+                )
+                response.raise_for_status()
+                response_json = response.json()
+                
+                if 'data' not in response_json or 'Media' not in response_json['data']:
+                    logger.error(f"Unexpected Anilist API response format for ID {anilist_id}: {response_json}")
+                    if 'errors' in response_json:
+                        logger.error(f"API Errors: {response_json['errors']}")
+                    
+                    if attempt < retries - 1:
+                        logger.info(f"Retrying in {delay} seconds... (Attempt {attempt+1}/{retries})")
+                        time.sleep(delay)
+                        continue
+                    return None
+                
+                return response_json['data']['Media']
+            except requests.RequestException as e:
+                logger.error(f"Error fetching episodes from Anilist by ID {anilist_id}: {str(e)}")
                 if attempt < retries - 1:
                     logger.info(f"Retrying in {delay} seconds... (Attempt {attempt+1}/{retries})")
                     time.sleep(delay)

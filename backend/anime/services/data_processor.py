@@ -128,9 +128,8 @@ class AnimeProcessor:
             # Process screenshots from both sources, prioritizing Anilist's streaming episodes
             ImageService.process_screenshots(anime, jikan_data, anilist_data)
             
-            # Process seasons and episodes if it's a TV series
-            if anime.type == 'tv':
-                EpisodeService.process_seasons_and_episodes(anime, jikan_data, anilist_data)
+            # Process episodes data - pass both API data to get maximum information
+            EpisodeService.process_episodes(anime, jikan_data, anilist_data)
             
             return anime
         except Exception as e:
@@ -251,6 +250,24 @@ class AnimeProcessor:
             if len(base_slug) > 250:
                 base_slug = base_slug[:250]
             anime.slug = base_slug
+        
+        # Get duration per episode
+        if data.get('duration'):
+            try:
+                duration_str = data['duration']
+                if isinstance(duration_str, str):
+                    # Extract minutes from duration string like "24 min"
+                    duration_match = re.search(r'(\d+)', duration_str)
+                    if duration_match:
+                        anime.duration_per_episode = int(duration_match.group(1))
+                    else:
+                        anime.duration_per_episode = 24  # Default
+                elif isinstance(duration_str, (int, float)):
+                    anime.duration_per_episode = int(duration_str)
+                else:
+                    anime.duration_per_episode = 24
+            except Exception:
+                anime.duration_per_episode = 24
     
     @staticmethod
     def _enhance_with_anilist_data(anime, data):
