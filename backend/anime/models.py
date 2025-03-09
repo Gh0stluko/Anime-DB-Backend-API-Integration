@@ -2,6 +2,7 @@ from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
 from django.core.validators import MinValueValidator, MaxValueValidator
+import datetime
 
 class Genre(models.Model):
     name = models.CharField('Оригінальна назва', max_length=100, unique=True)
@@ -108,6 +109,16 @@ class Anime(models.Model):
     # Add duration per episode field
     duration_per_episode = models.IntegerField('Тривалість епізоду (хв)', default=24)
 
+    # Update tracking fields
+    update_priority = models.IntegerField('Пріоритет оновлення', default=5, 
+                                         validators=[MinValueValidator(1), MaxValueValidator(10)])
+    last_full_update = models.DateTimeField('Останнє повне оновлення', null=True, blank=True)
+    last_metadata_update = models.DateTimeField('Останнє оновлення метаданих', null=True, blank=True)
+    last_episodes_update = models.DateTimeField('Останнє оновлення епізодів', null=True, blank=True)
+    last_images_update = models.DateTimeField('Останнє оновлення зображень', null=True, blank=True)
+    update_failures = models.IntegerField('Кількість невдалих спроб', default=0)
+    next_update_scheduled = models.DateTimeField('Наступне оновлення', null=True, blank=True)
+    
     def save(self, *args, **kwargs):
         # If migrating from old format to new, ensure poster_url contains a value
         if not hasattr(self, 'poster_url'):
@@ -149,6 +160,14 @@ class Anime(models.Model):
                 counter += 1
                 
             self.slug = base_slug
+
+        # Update priority if it hasn't been set manually
+        if self.update_priority == 5 and 'update_fields' not in kwargs:
+            self.update_priority = self.calculate_update_priority()
+            
+        # Schedule next update if not already set
+        if not self.next_update_scheduled and 'update_fields' not in kwargs:
+            self.schedule_next_update()
             
         super().save(*args, **kwargs)
 
@@ -159,6 +178,50 @@ class Anime(models.Model):
     def get_japanese_title(self):
         """Return proper encoded Japanese title"""
         return self.title_japanese if self.title_japanese else ""
+
+    def calculate_update_priority(self):
+        """Calculate update priority based on anime characteristics"""
+        base_priority = 5  # Default medium priority
+        
+        # Ongoing anime get higher priority
+        if self.status == 'ongoing':
+            base_priority += 3
+        
+        # Recently updated anime get lower priority
+        if self.last_full_update:
+            days_since_update = (timezone.now() - self.last_full_update).days
+            if days_since_update < 7:
+                base_priority -= 2
+            elif days_since_update < 30:
+                base_priority -= 1
+        
+        # New anime (without updates) get higher priority
+        if not self.last_full_update:
+            base_priority += 2
+        
+        # Anime with failures get lower priority to prevent API waste
+        if self.update_failures > 3:
+            base_priority -= 2
+        
+        # Clamp value between 1-10
+        return max(1, min(10, base_priority))
+    
+    def schedule_next_update(self):
+        """Schedule next update based on priority and status"""
+        base_days = 30  # Default: once a month
+        
+        # Adjust based on status
+        if self.status == 'ongoing':
+            base_days = 1  # Daily for ongoing
+        elif self.status == 'announced':
+            base_days = 7  # Weekly for announced
+        
+        # Adjust for priority (higher priority = more frequent updates)
+        priority_factor = (11 - self.update_priority) / 5  # 10->0.2, 5->1.2, 1->2
+        days = int(base_days * priority_factor)
+        
+        # Set next update time
+        self.next_update_scheduled = timezone.now() + datetime.timedelta(days=max(1, days))
 
     class Meta:
         ordering = ['-year', 'title_ukrainian']
@@ -264,3 +327,144 @@ class AnimeScreenshot(models.Model):
     class Meta:
         verbose_name = 'Скріншот'
         verbose_name_plural = 'Скріншоти'
+
+class UpdateStrategy(models.Model):
+    """Configuration for update strategies"""
+    name = models.CharField('Назва стратегії', max_length=100)
+    description = models.TextField('Опис', blank=True)
+    
+    # API limits
+    api_requests_per_minute = models.IntegerField('Запитів на хвилину', default=30)
+    api_requests_per_day = models.IntegerField('Запитів на день', default=3000)
+    
+    # Update frequency settings
+    ongoing_update_days = models.IntegerField('Днів між оновленнями для онгоінгів', default=1)
+    announced_update_days = models.IntegerField('Днів між оновленнями для анонсів', default=7)
+    completed_update_days = models.IntegerField('Днів між оновленнями для завершених', default=30)
+    
+    # Priority weights
+    ongoing_priority = models.IntegerField('Пріоритет онгоінгів', default=8)
+    popular_priority = models.IntegerField('Пріоритет популярних', default=7)
+    recent_priority = models.IntegerField('Пріоритет недавніх', default=6)
+    old_priority = models.IntegerField('Пріоритет старих', default=3)
+    
+    # Update batch sizes
+    batch_size = models.IntegerField('Розмір пакету оновлень', default=20)
+    
+    is_active = models.BooleanField('Активна', default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return self.name
+    
+    def save(self, *args, **kwargs):
+        # Ensure only one strategy is active
+        if self.is_active:
+            UpdateStrategy.objects.filter(is_active=True).update(is_active=False)
+        super().save(*args, **kwargs)
+    
+    class Meta:
+        verbose_name = 'Стратегія оновлення'
+        verbose_name_plural = 'Стратегії оновлення'
+
+class APIUsageStatistics(models.Model):
+    """Track API usage statistics"""
+    api_name = models.CharField('Назва API', max_length=50)
+    requests_count = models.IntegerField('Кількість запитів', default=0)
+    successful_requests = models.IntegerField('Успішні запити', default=0)
+    failed_requests = models.IntegerField('Невдалі запити', default=0)
+    last_request_at = models.DateTimeField('Останній запит', null=True)
+    
+    # Daily tracking
+    daily_count = models.IntegerField('Запитів за день', default=0)
+    daily_reset_at = models.DateTimeField('Скидання лічильника', default=timezone.now)
+    
+    # Rate limiting information
+    is_rate_limited = models.BooleanField('Обмеження швидкості', default=False)
+    rate_limited_until = models.DateTimeField('Обмеження діє до', null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.api_name} - {self.requests_count} запитів"
+    
+    def increment(self, success=True):
+        """Increment request counters"""
+        self.requests_count += 1
+        if success:
+            self.successful_requests += 1
+        else:
+            self.failed_requests += 1
+        
+        # Handle daily count
+        if timezone.now().date() > self.daily_reset_at.date():
+            self.daily_count = 1
+            self.daily_reset_at = timezone.now()
+        else:
+            self.daily_count += 1
+            
+        self.last_request_at = timezone.now()
+        self.save()
+    
+    def check_limits(self, strategy=None):
+        """Check if API limits are exceeded"""
+        if not strategy:
+            strategy = UpdateStrategy.objects.filter(is_active=True).first()
+            if not strategy:
+                return False
+                
+        # Check daily limit
+        if self.daily_count >= strategy.api_requests_per_day:
+            self.is_rate_limited = True
+            self.rate_limited_until = timezone.now().replace(hour=0, minute=0, second=0) + datetime.timedelta(days=1)
+            self.save()
+            return True
+            
+        # Check per-minute limit
+        if self.last_request_at and (timezone.now() - self.last_request_at).seconds < 60:
+            recent_count = APIRequestLog.objects.filter(
+                api_name=self.api_name,
+                created_at__gte=timezone.now() - datetime.timedelta(minutes=1)
+            ).count()
+            
+            if recent_count >= strategy.api_requests_per_minute:
+                self.is_rate_limited = True
+                self.rate_limited_until = timezone.now() + datetime.timedelta(minutes=1)
+                self.save()
+                return True
+                
+        return False
+    
+    class Meta:
+        verbose_name = 'Статистика використання API'
+        verbose_name_plural = 'Статистика використання API'
+
+class APIRequestLog(models.Model):
+    """Detailed log of API requests"""
+    api_name = models.CharField('Назва API', max_length=50)
+    endpoint = models.CharField('Ендпоінт', max_length=255)
+    parameters = models.JSONField('Параметри', null=True, blank=True)
+    response_code = models.IntegerField('Код відповіді', null=True, blank=True)
+    success = models.BooleanField('Успіх', default=False)
+    error_message = models.TextField('Повідомлення про помилку', blank=True)
+    created_at = models.DateTimeField('Створено', auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Лог запитів API'
+        verbose_name_plural = 'Логи запитів API'
+
+class UpdateLog(models.Model):
+    """Log of anime update operations"""
+    anime = models.ForeignKey(Anime, on_delete=models.CASCADE, related_name='update_logs')
+    update_type = models.CharField('Тип оновлення', max_length=50, choices=[
+        ('full', 'Повне оновлення'),
+        ('metadata', 'Метадані'),
+        ('episodes', 'Епізоди'),
+        ('images', 'Зображення')
+    ])
+    success = models.BooleanField('Успіх', default=False)
+    error_message = models.TextField('Повідомлення про помилку', blank=True)
+    created_at = models.DateTimeField('Створено', auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Лог оновлень'
+        verbose_name_plural = 'Логи оновлень'

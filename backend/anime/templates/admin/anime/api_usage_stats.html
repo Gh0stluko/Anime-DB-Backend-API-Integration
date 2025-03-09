@@ -1,0 +1,162 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+{% load custom_filters %}
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-gap: 20px;
+        }
+        .stat-card {
+            padding: 20px;
+            border-radius: 5px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-title {
+            font-size: 16px;
+            color: #666;
+        }
+        .progress-bar {
+            height: 10px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            margin-top: 5px;
+        }
+        .progress-bar .progress {
+            height: 100%;
+            border-radius: 5px;
+            background-color: #79aec8;
+        }
+        .requests-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .requests-table th, .requests-table td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+        .requests-table th {
+            background-color: #f2f2f2;
+        }
+        .success {
+            color: green;
+        }
+        .error {
+            color: red;
+        }
+        .rate-limited {
+            background-color: #f8d7da;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .breadcrumbs {
+            margin-bottom: 20px;
+        }
+    </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+&rsaquo; <a href="{% url 'admin:anime_anime_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+&rsaquo; {% trans 'Статистика API' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>{% trans 'Статистика використання API' %}</h1>
+    
+    {% if active_strategy %}
+    <div class="module">
+        <h2>{% trans 'Активна стратегія:' %} {{ active_strategy.name }}</h2>
+        <p>{{ active_strategy.description }}</p>
+        <p>{% trans 'Обмеження API:' %} {{ active_strategy.api_requests_per_minute }} {% trans 'запитів/хвилину' %}, {{ active_strategy.api_requests_per_day }} {% trans 'запитів/день' %}</p>
+    </div>
+    {% endif %}
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-title">Jikan API</div>
+            <div class="stat-value">{{ jikan_stats.requests_count|default:"0" }}</div>
+            <p>{% trans 'Всього запитів' %}</p>
+            
+            <div class="stat-title">{% trans 'Сьогодні:' %} {{ jikan_today }} {% trans 'запитів' %}</div>
+            <div class="stat-title">{% trans 'Вчора:' %} {{ jikan_yesterday }} {% trans 'запитів' %}</div>
+            
+            <div class="stat-title">{% trans 'Успішність:' %} {{ jikan_success_rate|floatformat:1 }}%</div>
+            <div class="progress-bar">
+                <div class="progress progress-width" style="--progress-width: {{ jikan_success_rate }}%;"></div>
+            </div>
+            
+            {% if jikan_stats.is_rate_limited %}
+            <div class="rate-limited">
+                {% trans 'Обмежено до' %} {{ jikan_stats.rate_limited_until }}
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-title">Anilist API</div>
+            <div class="stat-value">{{ anilist_stats.requests_count|default:"0" }}</div>
+            <p>{% trans 'Всього запитів' %}</p>
+            
+            <div class="stat-title">{% trans 'Сьогодні:' %} {{ anilist_today }} {% trans 'запитів' %}</div>
+            <div class="stat-title">{% trans 'Вчора:' %} {{ anilist_yesterday }} {% trans 'запитів' %}</div>
+            
+            <div class="stat-title">{% trans 'Успішність:' %} {{ anilist_success_rate|floatformat:1 }}%</div>
+            <div class="progress-bar">
+                <div class="progress progress-width" style="--progress-width: {{ anilist_success_rate }}%;"></div>
+            </div>
+            
+            {% if anilist_stats.is_rate_limited %}
+            <div class="rate-limited">
+                {% trans 'Обмежено до' %} {{ anilist_stats.rate_limited_until }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <h2>{% trans 'Недавні запити до API' %}</h2>
+    <table class="requests-table">
+        <thead>
+            <tr>
+                <th>{% trans 'Час' %}</th>
+                <th>API</th>
+                <th>{% trans 'Ендпоінт' %}</th>
+                <th>{% trans 'Статус' %}</th>
+                <th>{% trans 'Код відповіді' %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for request in recent_requests %}
+            <tr>
+                <td>{{ request.created_at }}</td>
+                <td>{{ request.api_name }}</td>
+                <td>{{ request.endpoint }}</td>
+                <td class="{% if request.success %}success{% else %}error{% endif %}">
+                    {% if request.success %}{% trans 'Успіх' %}{% else %}{% trans 'Помилка' %}{% endif %}
+                </td>
+                <td>{{ request.response_code|default:"--" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5">{% trans 'Ще немає записів запитів API' %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

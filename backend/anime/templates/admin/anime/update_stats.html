@@ -1,0 +1,319 @@
+{% extends "admin/base_site.html" %}
+{% load i18n  %}
+{% load admin_urls %}
+{% load custom_filters %}
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-gap: 20px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            padding: 20px;
+            border-radius: 5px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-title {
+            font-size: 16px;
+            color: #666;
+        }
+        .type-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            grid-gap: 15px;
+            margin-bottom: 20px;
+        }
+        .type-stat {
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .updates-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .updates-table th, .updates-table td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+        .updates-table th {
+            background-color: #f2f2f2;
+        }
+        .success {
+            color: green;
+        }
+        .error {
+            color: red;
+        }
+        .progress {
+            height: 10px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            margin-top: 5px;
+        }
+        .progress .progress-bar {
+            height: 100%;
+            border-radius: 5px;
+            background-color: #79aec8;
+            width: var(--progress-width, 0%);
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-gap: 20px;
+        }
+        .breadcrumbs {
+            margin-bottom: 20px;
+        }
+        .daily-chart {
+            height: 200px;
+            padding: 20px;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            position: relative;
+        }
+        .chart-bar {
+            display: inline-block;
+            width: 13%;
+            background: #79aec8;
+            margin-right: 0.5%;
+            position: relative;
+            bottom: 0;
+            vertical-align: bottom;
+        }
+        .chart-bar-label {
+            position: absolute;
+            bottom: -25px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 12px;
+        }
+        .chart-bar-value {
+            position: absolute;
+            top: -20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 12px;
+        }
+    </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+&rsaquo; <a href="{% url 'admin:anime_anime_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+&rsaquo; {% trans 'Статистика оновлень' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>{% trans 'Статистика оновлень' %}</h1>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-title">{% trans 'Всього оновлень' %}</div>
+            <div class="stat-value">{{ total_updates }}</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-title">{% trans 'Успішність' %}</div>
+            <div class="stat-value">{{ success_rate|floatformat:1 }}%</div>
+            <div class="progress-bar">
+                <div class="progress" style="--progress-width: {{ success_rate|floatformat:1 }}%;"></div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-title">{% trans 'Оновлень сьогодні' %}</div>
+            <div class="stat-value">{{ updates_by_day.0.count }}</div>
+        </div>
+    </div>
+    
+    <h2>{% trans 'Оновлення за типом' %}</h2>
+    <div class="type-stats">
+        <div class="type-stat">
+            <div class="stat-title">{% trans 'Повні' %}</div>
+            <div class="stat-value">{{ updates_by_type.full }}</div>
+        </div>
+        
+        <div class="type-stat">
+            <div class="stat-title">{% trans 'Метадані' %}</div>
+            <div class="stat-value">{{ updates_by_type.metadata }}</div>
+        </div>
+        
+        <div class="type-stat">
+            <div class="stat-title">{% trans 'Епізоди' %}</div>
+            <div class="stat-value">{{ updates_by_type.episodes }}</div>
+        </div>
+        
+        <div class="type-stat">
+            <div class="stat-title">{% trans 'Зображення' %}</div>
+            <div class="stat-value">{{ updates_by_type.images }}</div>
+        </div>
+    </div>
+    
+    <h2>{% trans 'Оновлення за днями (останні 7 днів)' %}</h2>
+    <div class="daily-chart">
+        {% for day in updates_by_day %}
+        {% with max_value=updates_by_day.0.count %}
+        {% if max_value > 0 %}
+            {% with height=day.count %}
+                {% with percent=height|multiply:"100"|divide:max_value %}
+                    <div class="chart-bar" style="height: {% if height == 0 %}1%{% else %}{{ percent }}%{% endif %};">
+                        <div class="chart-bar-label">{{ day.date }}</div>
+                        <div class="chart-bar-value">{{ height }}</div>
+                    </div>
+                {% endwith %}
+            {% endwith %}
+        {% else %}
+            <div class="chart-bar" style="height: 1%">
+                <div class="chart-bar-label">{{ day.date }}</div>
+                <div class="chart-bar-value">0</div>
+            </div>
+        {% endif %}
+        {% endwith %}
+        {% endfor %}
+    </div>
+    
+    <div class="grid-2">
+        <div>
+            <h2>{% trans 'Аніме, що потребують оновлень' %}</h2>
+            <table class="updates-table">
+                <thead>
+                    <tr>
+                        <th>{% trans 'Аніме' %}</th>
+                        <th>{% trans 'Пріоритет' %}</th>
+                        <th>{% trans 'Статус' %}</th>
+                        <th>{% trans 'Останнє оновлення' %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for anime in need_updates %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'admin:anime_anime_change' anime.id %}">
+                                {{ anime.title_ukrainian }}
+                            </a>
+                        </td>
+                        <td>{{ anime.update_priority }}</td>
+                        <td>{{ anime.get_status_display }}</td>
+                        <td>
+                            {% if anime.last_full_update %}
+                                {{ anime.last_full_update|date:"d.m.Y H:i" }}
+                            {% else %}
+                                {% trans 'Ніколи' %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">{% trans 'Немає аніме, що потребують оновлення' %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div>
+            <h2>{% trans 'Заплановані оновлення' %}</h2>
+            <table class="updates-table">
+                <thead>
+                    <tr>
+                        <th>{% trans 'Аніме' %}</th>
+                        <th>{% trans 'Пріоритет' %}</th>
+                        <th>{% trans 'Статус' %}</th>
+                        <th>{% trans 'Заплановано' %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for anime in upcoming_updates %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'admin:anime_anime_change' anime.id %}">
+                                {{ anime.title_ukrainian }}
+                            </a>
+                        </td>
+                        <td>{{ anime.update_priority }}</td>
+                        <td>{{ anime.get_status_display }}</td>
+                        <td>{{ anime.next_update_scheduled|date:"d.m.Y H:i" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">{% trans 'Немає запланованих оновлень' %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <h2>{% trans 'Історія останніх оновлень' %}</h2>
+    <table class="updates-table">
+        <thead>
+            <tr>
+                <th>{% trans 'Час' %}</th>
+                <th>{% trans 'Аніме' %}</th>
+                <th>{% trans 'Тип' %}</th>
+                <th>{% trans 'Статус' %}</th>
+                <th>{% trans 'Повідомлення' %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for update in recent_updates %}
+            <tr>
+                <td>{{ update.created_at|date:"d.m.Y H:i:s" }}</td>
+                <td>
+                    <a href="{% url 'admin:anime_anime_change' update.anime.id %}">
+                        {{ update.anime.title_ukrainian }}
+                    </a>
+                </td>
+                <td>
+                    {% if update.update_type == 'full' %}
+                        {% trans 'Повне' %}
+                    {% elif update.update_type == 'metadata' %}
+                        {% trans 'Метадані' %}
+                    {% elif update.update_type == 'episodes' %}
+                        {% trans 'Епізоди' %}
+                    {% elif update.update_type == 'images' %}
+                        {% trans 'Зображення' %}
+                    {% else %}
+                        {{ update.update_type }}
+                    {% endif %}
+                </td>
+                <td class="{% if update.success %}success{% else %}error{% endif %}">
+                    {% if update.success %}
+                        {% trans 'Успіх' %}
+                    {% else %}
+                        {% trans 'Невдача' %}
+                    {% endif %}
+                </td>
+                <td>{{ update.error_message|truncatechars:50 }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5">{% trans 'Історія оновлень відсутня' %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

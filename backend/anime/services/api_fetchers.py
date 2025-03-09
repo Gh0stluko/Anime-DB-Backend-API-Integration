@@ -4,6 +4,8 @@ import time
 import traceback
 from datetime import datetime
 
+from .api_rate_limiter import rate_limited
+
 # Set up dedicated logger with increased detail
 logger = logging.getLogger(__name__)
 
@@ -14,6 +16,7 @@ class JikanAPIFetcher:
     def __init__(self):
         self.session = requests.Session()
     
+    @rate_limited(api_name="Jikan")
     def fetch_top_anime(self, page=1, limit=25, retries=3, delay=2):
         """Fetch top anime from Jikan API"""
         url = f"{self.BASE_URL}/top/anime?page={page}&limit={limit}"
@@ -198,6 +201,7 @@ class AnilistAPIFetcher:
     """Service for fetching anime data from Anilist API"""
     API_URL = "https://graphql.anilist.co"
     
+    @rate_limited(api_name="Anilist")
     def fetch_popular_anime(self, page=1, per_page=25, retries=3, delay=2):
         """Fetch popular anime from Anilist"""
         query = '''
@@ -290,6 +294,7 @@ class AnilistAPIFetcher:
                 else:
                     return []
 
+    @rate_limited(api_name="Anilist")
     def fetch_anime_by_id(self, id_mal, retries=3, delay=2):
         """Fetch anime from Anilist by MyAnimeList ID"""
         query = '''

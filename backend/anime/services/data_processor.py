@@ -52,15 +52,38 @@ class AnimeProcessor:
         
         # Fetch anime data from Jikan API
         if mal_id:
+            logger.info(f"Fetching anime with MAL ID {mal_id} from Jikan API")
             jikan_data = [jikan_fetcher.fetch_anime_details(mal_id)]
             if jikan_data[0] is None:
+                logger.warning(f"Could not fetch anime with MAL ID {mal_id} from Jikan API")
                 jikan_data = []
         elif mode == "top":
+            logger.info(f"Fetching top anime from Jikan API (page {page}, limit {limit})")
             jikan_data = jikan_fetcher.fetch_top_anime(page=page, limit=limit)
         elif mode == "seasonal":
+            logger.info("Fetching seasonal anime from Jikan API")
             jikan_data = jikan_fetcher.fetch_seasonal_anime()
         else:
+            logger.warning(f"Unknown mode '{mode}', no anime data will be fetched")
             jikan_data = []
+            
+        logger.info(f"Received {len(jikan_data)} anime entries from Jikan API")
+        
+        # Instead of fetching individual Anilist data for each anime,
+        # fetch a batch of popular anime from Anilist to use as supplementary data
+        anilist_cache = {}
+        
+        # Only fetch from Anilist if we have Jikan data and not in "detail" mode (which is for specific anime)
+        if jikan_data and mode in ["top", "seasonal"]:
+            logger.info(f"Fetching batch of {limit} anime from Anilist API to use as supplementary data")
+            anilist_batch = anilist_fetcher.fetch_popular_anime(page=page, per_page=limit)
+            
+            # Create a mapping of MAL IDs to Anilist data for easy lookup
+            for anilist_entry in anilist_batch:
+                if anilist_entry.get('idMal'):
+                    anilist_cache[anilist_entry['idMal']] = anilist_entry
+            
+            logger.info(f"Cached {len(anilist_cache)} anime entries from Anilist API")
         
         # Process each anime with combined data
         for anime_jikan in jikan_data:
@@ -69,19 +92,29 @@ class AnimeProcessor:
                 mal_id = anime_jikan.get('mal_id')
                 logger.info(f"Processing anime ID {mal_id} from Jikan")
                 
-                # Try to fetch the same anime from Anilist for additional data
+                # Try to get the anime from Anilist cache first
                 anilist_data = None
-                if mal_id:
+                if mal_id and mal_id in anilist_cache:
+                    anilist_data = anilist_cache[mal_id]
+                    logger.info(f"Found anime ID {mal_id} in Anilist cache")
+                # If not in cache and we have a MAL ID, fetch from Anilist API individually
+                elif mal_id:
+                    logger.info(f"Anime ID {mal_id} not in cache, fetching from Anilist API")
                     anilist_data = anilist_fetcher.fetch_anime_by_id(mal_id)
                     if anilist_data:
-                        logger.info(f"Found matching anime on Anilist for MAL ID {mal_id}")
+                        logger.info(f"Successfully fetched anime ID {mal_id} from Anilist API")
+                    else:
+                        logger.warning(f"Could not fetch anime ID {mal_id} from Anilist API")
                 
-                # Process the combined data
-                anime = AnimeProcessor.process_combined_anime(anime_jikan, anilist_data)
-                if anime:
-                    processed_anime.append(anime)
+                # Process the anime with combined data
+                processed = AnimeProcessor.process_combined_anime(anime_jikan, anilist_data)
+                if processed:
+                    processed_anime.append(processed)
+                    logger.info(f"Successfully processed anime '{processed.title_original}'")
+                else:
+                    logger.warning(f"Failed to process anime ID {mal_id}")
             except Exception as e:
-                logger.error(f"Error processing combined anime data: {str(e)}")
+                logger.error(f"Error processing anime: {str(e)}")
                 logger.error(traceback.format_exc())
         
         return processed_anime

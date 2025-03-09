@@ -1,9 +1,14 @@
 import logging
 import traceback
-import sys
+import time
 from celery import shared_task
+from django.db import models
+from django.utils import timezone
+from .models import Anime, UpdateLog
 from .services.anime_fetcher import JikanAPIFetcher, AnilistAPIFetcher, AnimeProcessor
-from .models import Anime
+from .services.update_scheduler import UpdateScheduler
+from .services.api_rate_limiter import APIRateLimiter
+from .services.image_service import ImageService
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +24,14 @@ def fetch_top_anime_task(self, page=1, limit=25):
             limit=limit, 
             mode="top"
         )
+        
+        # Record updates for processed anime
+        for anime in processed_anime:
+            UpdateScheduler.record_update_attempt(
+                anime=anime,
+                update_type='full',
+                success=True
+            )
         
         if not processed_anime:
             error_msg = "Failed to fetch anime or no anime were successfully processed"
@@ -42,6 +55,14 @@ def fetch_seasonal_anime_task(self, year=None, season=None):
         processed_anime = AnimeProcessor.fetch_and_process_combined(
             mode="seasonal"
         )
+        
+        # Record updates for all processed anime
+        for anime in processed_anime:
+            UpdateScheduler.record_update_attempt(
+                anime=anime,
+                update_type='full',
+                success=True
+            )
         
         if not processed_anime:
             error_msg = "Failed to fetch seasonal anime or no anime were successfully processed"
@@ -71,6 +92,14 @@ def fetch_anime_details_task(self, mal_id):
             error_msg = f"Failed to fetch or process anime with MAL ID {mal_id}"
             logger.error(error_msg)
             return error_msg
+            
+        # Record the update
+        if processed_anime and len(processed_anime) > 0:
+            UpdateScheduler.record_update_attempt(
+                anime=processed_anime[0],
+                update_type='full',
+                success=True
+            )
         
         return f"Successfully processed anime with MAL ID {mal_id} from multiple sources"
     except Exception as ex:
@@ -101,8 +130,14 @@ def fetch_popular_anilist_anime_task(self, page=1, per_page=25):
         processed_count = 0
         for anime_data in anime_list:
             try:
-                processor.process_anilist_anime(anime_data)
-                processed_count += 1
+                anime = processor.process_anilist_anime(anime_data)
+                if anime:
+                    UpdateScheduler.record_update_attempt(
+                        anime=anime,
+                        update_type='full',
+                        success=True
+                    )
+                    processed_count += 1
             except Exception as e:
                 logger.error(f"Error processing anime {anime_data.get('title', {}).get('romaji')}: {str(e)}")
                 logger.debug(traceback.format_exc())
@@ -116,102 +151,327 @@ def fetch_popular_anilist_anime_task(self, page=1, per_page=25):
 
 @shared_task(bind=True, max_retries=3)
 def update_anime_screenshots_task(self, mal_id=None, count=None):
-    """
-    Задача для оновлення скріншотів аніме
+    """Task to update screenshots for anime"""
+    logger.info(f"Starting screenshots update task (mal_id: {mal_id}, count: {count})")
     
-    Args:
-        mal_id: ID аніме на MyAnimeList (якщо вказано, оновлюються скріншоти лише для цього аніме)
-        count: Кількість аніме для оновлення (якщо mal_id не вказано)
-    
-    Returns:
-        str: Повідомлення про результат виконання
-    """
-    logger.info(f"Оновлення скріншотів для аніме (mal_id: {mal_id}, count: {count})")
+    try:
+        if (mal_id):
+            # Update specific anime by ID
+            anime = Anime.objects.filter(mal_id=mal_id).first()
+            if anime:
+                jikan_fetcher = JikanAPIFetcher()
+                anilist_fetcher = AnilistAPIFetcher()
+                
+                jikan_data = jikan_fetcher.fetch_anime_details(mal_id)
+                anilist_data = anilist_fetcher.fetch_anime_by_id(mal_id)
+                
+                ImageService.process_screenshots(anime, jikan_data, anilist_data)
+                
+                # Record update
+                UpdateScheduler.record_update_attempt(
+                    anime=anime,
+                    update_type='images',
+                    success=True
+                )
+                
+                return f"Updated screenshots for anime {anime.title_ukrainian}"
+            else:
+                return f"Anime with MAL ID {mal_id} not found"
+        else:
+            # Update batch of anime with few screenshots
+            processed = 0
+            count = count or 20  # Default to 20 if not specified
+            
+            # Use annotate to count screenshots instead of filter with count lookup
+            anime_with_few_screenshots = Anime.objects.annotate(
+                screenshots_count=models.Count('screenshots')
+            ).filter(screenshots_count__lt=5).order_by('?')[:count]
+            
+            for anime in anime_with_few_screenshots:
+                try:
+                    if anime.mal_id:
+                        # Fetch data from APIs
+                        jikan_fetcher = JikanAPIFetcher()
+                        anilist_fetcher = AnilistAPIFetcher()
+                        
+                        jikan_data = jikan_fetcher.fetch_anime_details(anime.mal_id)
+                        anilist_data = anilist_fetcher.fetch_anime_by_id(anime.mal_id)
+                        
+                        # Process screenshots
+                        ImageService.process_screenshots(anime, jikan_data, anilist_data)
+                        
+                        # Record update
+                        UpdateScheduler.record_update_attempt(
+                            anime=anime,
+                            update_type='images',
+                            success=True
+                        )
+                        
+                        processed += 1
+                        # Add a small delay to avoid overwhelming APIs
+                        time.sleep(1)
+                except Exception as e:
+                    logger.error(f"Error updating screenshots for anime {anime.title_ukrainian}: {str(e)}")
+            
+            return f"Updated screenshots for {processed} anime"
+    except Exception as ex:
+        logger.error(f"Unexpected error in update_anime_screenshots_task: {str(ex)}")
+        logger.error(traceback.format_exc())
+        # Retry the task with exponential backoff
+        raise self.retry(exc=ex, countdown=60 * (2 ** self.request.retries))
+
+@shared_task(bind=True, max_retries=3)
+def update_anime_episodes_task(self, mal_id=None, count=None):
+    """Task to update episodes for anime"""
+    logger.info(f"Updating episodes for anime (mal_id: {mal_id}, count: {count})")
     
     try:
         jikan_fetcher = JikanAPIFetcher()
         anilist_fetcher = AnilistAPIFetcher()
         
         if mal_id:
-            # Обробка одного аніме за mal_id
+            # Process a specific anime
             anime = Anime.objects.filter(mal_id=mal_id).first()
             if not anime:
-                return f"Аніме з ID {mal_id} не знайдено в базі даних"
-            
-            # Отримання даних з API
+                return f"Anime with MAL ID {mal_id} not found"
+                
+            # Fetch data
             jikan_data = jikan_fetcher.fetch_anime_details(mal_id)
             anilist_data = anilist_fetcher.fetch_anime_by_id(mal_id)
             
-            # Обробка скріншотів для конкретного аніме
+            # Process episodes
             if jikan_data or anilist_data:
-                AnimeProcessor._process_screenshots(anime, jikan_data, anilist_data)
-                return f"Скріншоти успішно оновлено для аніме '{anime.title_ukrainian}'"
+                AnimeProcessor._process_episodes(anime, jikan_data, anilist_data)
+                
+                # Record the update
+                UpdateScheduler.record_update_attempt(
+                    anime=anime,
+                    update_type='episodes',
+                    success=True
+                )
+                
+                return f"Successfully updated episodes for anime '{anime.title_ukrainian}'"
             else:
-                return f"Не знайдено даних в API для аніме з ID {mal_id}"
+                return f"No data found for anime with MAL ID {mal_id}"
         else:
-            # Обробка кількох аніме з бази даних
-            if not count:
-                count = 10  # За замовчуванням обробляємо 10 аніме
+            # Use our prioritized scheduler
+            candidates = UpdateScheduler.get_update_candidates(
+                batch_size=count or 20,
+                update_type='episodes'
+            )
             
-            # Отримуємо аніме з найменшою кількістю скріншотів
-            animes_to_update = Anime.objects.annotate(
-                screenshots_count=models.Count('screenshots')
-            ).order_by('screenshots_count')[:count]
-            
+            if not candidates:
+                return "No anime found for episode updates"
+                
             updated_count = 0
-            for anime in animes_to_update:
+            for anime in candidates:
                 if anime.mal_id:
                     try:
-                        # Отримання даних з API
+                        # Fetch data
                         jikan_data = jikan_fetcher.fetch_anime_details(anime.mal_id)
                         anilist_data = anilist_fetcher.fetch_anime_by_id(anime.mal_id)
                         
-                        # Обробка скріншотів
+                        # Process episodes
                         if jikan_data or anilist_data:
-                            AnimeProcessor._process_screenshots(anime, jikan_data, anilist_data)
+                            AnimeProcessor._process_episodes(anime, jikan_data, anilist_data)
+                            
+                            # Record the update
+                            UpdateScheduler.record_update_attempt(
+                                anime=anime,
+                                update_type='episodes',
+                                success=True
+                            )
+                            
                             updated_count += 1
                     except Exception as e:
-                        logger.error(f"Помилка при оновленні скріншотів для аніме {anime.title_ukrainian} (ID: {anime.mal_id}): {str(e)}")
+                        logger.error(f"Error updating episodes for anime {anime.title_ukrainian} (ID: {anime.mal_id}): {str(e)}")
+                        # Record the failure
+                        UpdateScheduler.record_update_attempt(
+                            anime=anime,
+                            update_type='episodes',
+                            success=False,
+                            error_message=str(e)
+                        )
                         continue
             
-            return f"Успішно оновлено скріншоти для {updated_count} з {animes_to_update.count()} аніме"
-    except Exception as ex:
-        logger.error(f"Несподівана помилка в update_anime_screenshots_task: {str(ex)}")
-        logger.error(traceback.format_exc())
-        # Повторний запуск задачі з експоненційним відкатом
-        raise self.retry(exc=ex, countdown=60 * (2 ** self.request.retries))
-
-@shared_task(bind=True, max_retries=3)
-def update_anime_episodes_task(self, mal_id):
-    """Task to fetch and update episode data for a specific anime"""
-    logger.info(f"Fetching episode data for anime with MAL ID {mal_id}")
-    
-    try:
-        # Get the anime from the database
-        anime = Anime.objects.filter(mal_id=mal_id).first()
-        if not anime:
-            error_msg = f"Anime with MAL ID {mal_id} not found in the database"
-            logger.error(error_msg)
-            return error_msg
-            
-        # Fetch detailed anime data
-        jikan_fetcher = JikanAPIFetcher()
-        anilist_fetcher = AnilistAPIFetcher()
-        
-        jikan_data = jikan_fetcher.fetch_anime_details(mal_id)
-        anilist_data = anilist_fetcher.fetch_anime_by_id(mal_id)
-        
-        if jikan_data or anilist_data:
-            # Process seasons and episodes
-            if anime.type == 'tv':
-                AnimeProcessor._process_seasons_and_episodes(anime, jikan_data, anilist_data)
-                
-            return f"Successfully updated episodes for anime {anime.title_ukrainian} (MAL ID: {mal_id})"
-        else:
-            return f"Failed to fetch data for anime with MAL ID {mal_id}"
-            
+            return f"Successfully updated episodes for {updated_count} of {len(candidates)} anime"
     except Exception as ex:
         logger.error(f"Unexpected error in update_anime_episodes_task: {str(ex)}")
         logger.error(traceback.format_exc())
-        # Retry the task with exponential backoff
+        # Retry with exponential backoff
         raise self.retry(exc=ex, countdown=60 * (2 ** self.request.retries))
+
+@shared_task(bind=True)
+def update_anime_by_priority_task(self, batch_size=None, update_type='full'):
+    """Task to update anime based on priority and schedule"""
+    logger.info(f"Starting priority-based anime updates ({update_type}, batch_size: {batch_size})")
+    
+    try:
+        # Get candidates for update
+        candidates = UpdateScheduler.get_update_candidates(
+            batch_size=batch_size,
+            update_type=update_type
+        )
+        
+        if not candidates:
+            logger.info("No anime found for scheduled update")
+            return "No anime found for scheduled update"
+        
+        logger.info(f"Found {len(candidates)} anime to update")
+        
+        # Initialize API fetchers
+        jikan_fetcher = JikanAPIFetcher()
+        anilist_fetcher = AnilistAPIFetcher()
+        
+        successful_updates = 0
+        failed_updates = 0
+        
+        for anime in candidates:
+            try:
+                logger.info(f"Updating {anime.title_ukrainian} (ID: {anime.id}, MAL ID: {anime.mal_id})")
+                
+                if not anime.mal_id:
+                    logger.warning(f"Anime {anime.title_ukrainian} has no MAL ID. Skipping.")
+                    continue
+                
+                # Check for API rate limiting
+                if APIRateLimiter.check_rate_limit("Jikan") or APIRateLimiter.check_rate_limit("Anilist"):
+                    logger.warning("API rate limits reached. Pausing updates.")
+                    break
+                
+                # Fetch data
+                jikan_data = jikan_fetcher.fetch_anime_details(anime.mal_id)
+                anilist_data = anilist_fetcher.fetch_anime_by_id(anime.mal_id)
+                
+                if not jikan_data and not anilist_data:
+                    error_msg = f"Failed to fetch data for {anime.title_ukrainian}"
+                    logger.error(error_msg)
+                    UpdateScheduler.record_update_attempt(
+                        anime=anime,
+                        update_type=update_type,
+                        success=False,
+                        error_message=error_msg
+                    )
+                    failed_updates += 1
+                    continue
+                
+                # Process the data based on update type
+                if update_type == 'full':
+                    updated_anime = AnimeProcessor.process_combined_anime(jikan_data, anilist_data)
+                    if updated_anime:
+                        UpdateScheduler.record_update_attempt(
+                            anime=updated_anime,
+                            update_type=update_type,
+                            success=True
+                        )
+                        successful_updates += 1
+                    else:
+                        UpdateScheduler.record_update_attempt(
+                            anime=anime,
+                            update_type=update_type,
+                            success=False,
+                            error_message="Failed to process anime data"
+                        )
+                        failed_updates += 1
+                elif update_type == 'metadata':
+                    # Only update basic info
+                    try:
+                        if jikan_data:
+                            AnimeProcessor._apply_jikan_data(anime, jikan_data)
+                        if anilist_data:
+                            AnimeProcessor._enhance_with_anilist_data(anime, anilist_data)
+                        anime.save()
+                        UpdateScheduler.record_update_attempt(
+                            anime=anime,
+                            update_type=update_type,
+                            success=True
+                        )
+                        successful_updates += 1
+                    except Exception as e:
+                        logger.error(f"Error updating metadata: {str(e)}")
+                        UpdateScheduler.record_update_attempt(
+                            anime=anime,
+                            update_type=update_type,
+                            success=False,
+                            error_message=str(e)
+                        )
+                        failed_updates += 1
+                elif update_type == 'episodes':
+                    # Only update episodes
+                    try:
+                        AnimeProcessor._process_episodes(anime, jikan_data, anilist_data)
+                        UpdateScheduler.record_update_attempt(
+                            anime=anime,
+                            update_type=update_type,
+                            success=True
+                        )
+                        successful_updates += 1
+                    except Exception as e:
+                        logger.error(f"Error updating episodes: {str(e)}")
+                        UpdateScheduler.record_update_attempt(
+                            anime=anime,
+                            update_type=update_type,
+                            success=False,
+                            error_message=str(e)
+                        )
+                        failed_updates += 1
+                elif update_type == 'images':
+                    # Only update screenshots
+                    try:
+                        AnimeProcessor._process_screenshots(anime, jikan_data, anilist_data)
+                        UpdateScheduler.record_update_attempt(
+                            anime=anime,
+                            update_type=update_type,
+                            success=True
+                        )
+                        successful_updates += 1
+                    except Exception as e:
+                        logger.error(f"Error updating images: {str(e)}")
+                        UpdateScheduler.record_update_attempt(
+                            anime=anime,
+                            update_type=update_type,
+                            success=False,
+                            error_message=str(e)
+                        )
+                        failed_updates += 1
+                
+            except Exception as e:
+                logger.error(f"Error updating anime {anime.title_ukrainian}: {str(e)}")
+                logger.error(traceback.format_exc())
+                UpdateScheduler.record_update_attempt(
+                    anime=anime,
+                    update_type=update_type,
+                    success=False,
+                    error_message=str(e)
+                )
+                failed_updates += 1
+        
+        return f"Updated {successful_updates} anime successfully ({failed_updates} failed)"
+    
+    except Exception as ex:
+        logger.error(f"Unexpected error in update_anime_by_priority_task: {str(ex)}")
+        logger.error(traceback.format_exc())
+        # Don't retry automatically - this task will run again on schedule
+        return f"Error: {str(ex)}"
+
+@shared_task(bind=True)
+def recalculate_update_priorities_task(self):
+    """Task to recalculate update priorities for all anime"""
+    try:
+        count = UpdateScheduler.recalculate_priorities()
+        return f"Recalculated priorities for {count} anime"
+    except Exception as ex:
+        logger.error(f"Error in recalculate_update_priorities_task: {str(ex)}")
+        logger.error(traceback.format_exc())
+        return f"Error: {str(ex)}"
+
+@shared_task(bind=True)
+def reschedule_updates_task(self):
+    """Task to reschedule next update time for all anime"""
+    try:
+        count = UpdateScheduler.reschedule_updates()
+        return f"Rescheduled updates for {count} anime"
+    except Exception as ex:
+        logger.error(f"Error in reschedule_updates_task: {str(ex)}")
+        logger.error(traceback.format_exc())
+        return f"Error: {str(ex)}"

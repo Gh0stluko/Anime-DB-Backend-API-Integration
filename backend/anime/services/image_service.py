@@ -34,9 +34,9 @@ class ImageService:
         existing_urls = set(AnimeScreenshot.objects.filter(anime=anime).values_list('image_url', flat=True))
         
         # First, try to get screenshots from AniList's streaming episodes which have better thumbnails
-        if anilist_data and anilist_data.get('streamingEpisodes'):
+        if anilist_data and isinstance(anilist_data, dict) and anilist_data.get('streamingEpisodes'):
             for episode in anilist_data['streamingEpisodes']:
-                if episode.get('thumbnail'):
+                if episode and isinstance(episode, dict) and episode.get('thumbnail'):
                     thumbnail_url = episode['thumbnail']
                     # Перевіряємо, чи URL не є в базі даних
                     if thumbnail_url not in existing_urls:
@@ -56,7 +56,7 @@ class ImageService:
                             return
         
         # Try Anilist trailer thumbnail
-        if anilist_data and anilist_data.get('trailer', {}).get('thumbnail'):
+        if anilist_data and isinstance(anilist_data, dict) and anilist_data.get('trailer') and isinstance(anilist_data['trailer'], dict) and anilist_data['trailer'].get('thumbnail'):
             thumbnail_url = anilist_data['trailer']['thumbnail']
             if thumbnail_url not in existing_urls:
                 screenshot = AnimeScreenshot(
@@ -71,7 +71,7 @@ class ImageService:
                     return
         
         # Try Anilist cover images
-        if anilist_data and anilist_data.get('coverImage'):
+        if anilist_data and isinstance(anilist_data, dict) and anilist_data.get('coverImage') and isinstance(anilist_data['coverImage'], dict):
             for size_key in ['extraLarge', 'large', 'medium']:
                 if anilist_data['coverImage'].get(size_key):
                     cover_url = anilist_data['coverImage'][size_key]
@@ -88,7 +88,7 @@ class ImageService:
                             return
         
         # Add Anilist banner as screenshot if available
-        if anilist_data and anilist_data.get('bannerImage'):
+        if anilist_data and isinstance(anilist_data, dict) and anilist_data.get('bannerImage'):
             banner_url = anilist_data['bannerImage']
             if banner_url not in existing_urls:
                 screenshot = AnimeScreenshot(
@@ -103,9 +103,9 @@ class ImageService:
                     return
         
         # Finally, use Jikan images
-        if jikan_data and jikan_data.get('images'):
+        if jikan_data and isinstance(jikan_data, dict) and jikan_data.get('images') and isinstance(jikan_data['images'], dict):
             for img_type in ['jpg', 'webp']:
-                if jikan_data['images'].get(img_type):
+                if jikan_data['images'].get(img_type) and isinstance(jikan_data['images'][img_type], dict):
                     for size in ['large_image_url', 'image_url', 'small_image_url']:
                         if jikan_data['images'][img_type].get(size):
                             image_url = jikan_data['images'][img_type][size]
