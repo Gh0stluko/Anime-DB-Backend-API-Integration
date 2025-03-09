@@ -1,40 +1,120 @@
 {% extends 'admin/change_list.html' %}
 {% load i18n %}
 
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .admin-panel-buttons {
+        margin-bottom: 20px;
+    }
+    .button-section {
+        margin-bottom: 15px;
+        background-color: rgba(48, 54, 61, 0.4);
+        padding: 15px;
+        border-radius: 5px;
+        border: 1px solid var(--border-color);
+    }
+    .section-title {
+        margin-bottom: 10px;
+        font-weight: 500;
+        color: var(--body-fg);
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 5px;
+    }
+    .admin-button {
+        padding: 8px 12px;
+        margin-right: 10px;
+        margin-bottom: 5px;
+        border-radius: 4px;
+        border: none;
+        text-decoration: none;
+        display: inline-block;
+        font-weight: normal;
+        transition: all 0.2s;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    .admin-button:hover {
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        transform: translateY(-1px);
+    }
+    .admin-button:active {
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        transform: translateY(0);
+    }
+    .primary-button {
+        background-color: var(--accent);
+        color: white;
+    }
+    .primary-button:hover {
+        background-color: #64a9c9;
+        color: white;
+    }
+    .secondary-button {
+        background-color: #3d4550;
+        color: var(--primary-fg);
+    }
+    .secondary-button:hover {
+        background-color: #4a545e;
+        color: white;
+    }
+    .info-button {
+        background-color: var(--darkened-bg);
+        color: var(--body-quiet-color);
+        border: 1px solid var(--border-color);
+    }
+    .info-button:hover {
+        background-color: var(--secondary);
+        color: white;
+    }
+    /* Прогресбар для темної теми, якщо він застосовується */
+    .progress-bar {
+        border-radius: 5px;
+        overflow: hidden;
+        background-color: var(--primary);
+        border: 1px solid var(--border-color);
+    }
+    .progress-bar .progress {
+        height: 100%;
+        background-color: var(--accent);
+        border-radius: 0;
+    }
+</style>
+{% endblock %}
+
 {% block object-tools %}
-    <div style="margin-bottom: 20px;">
-        <div style="margin-bottom: 10px;">
-            <h3>{% trans 'Data Import' %}</h3>
-            <a href="{% url 'admin:fetch-top-anime' %}" class="button" style="background-color: #417690; color: white; padding: 8px 12px; margin-right: 10px;">
+    <div class="admin-panel-buttons">
+        <div class="button-section">
+            <h3 class="section-title">{% trans 'Data Import' %}</h3>
+            <a href="{% url 'admin:fetch-top-anime' %}" class="admin-button primary-button">
                 {% trans 'Отримати топ аніме' %}
             </a>
-            <a href="{% url 'admin:fetch-seasonal-anime' %}" class="button" style="background-color: #79aec8; color: white; padding: 8px 12px; margin-right: 10px;">
+            <a href="{% url 'admin:fetch-seasonal-anime' %}" class="admin-button secondary-button">
                 {% trans 'Отримати сезонне аніме' %}
             </a>
         </div>
 
-        <div style="margin-bottom: 10px;">
-            <h3>{% trans 'Smart Updates' %}</h3>
-            <a href="{% url 'admin:update-priority-anime' %}" class="button" style="background-color: #417690; color: white; padding: 8px 12px; margin-right: 10px;">
+        <div class="button-section">
+            <h3 class="section-title">{% trans 'Smart Updates' %}</h3>
+            <a href="{% url 'admin:update-priority-anime' %}" class="admin-button primary-button">
                 {% trans 'Оновити пріоритетні аніме' %}
             </a>
-            <a href="{% url 'admin:update-episodes' %}" class="button" style="background-color: #79aec8; color: white; padding: 8px 12px; margin-right: 10px;">
+            <a href="{% url 'admin:update-episodes' %}" class="admin-button secondary-button">
                 {% trans 'Оновити епізоди' %}
             </a>
-            <a href="{% url 'admin:update-screenshots' %}" class="button" style="background-color: #79aec8; color: white; padding: 8px 12px; margin-right: 10px;">
+            <a href="{% url 'admin:update-screenshots' %}" class="admin-button secondary-button">
                 {% trans 'Оновити скріншоти' %}
             </a>
         </div>
 
-        <div style="margin-bottom: 10px;">
-            <h3>{% trans 'System Tools' %}</h3>
-            <a href="{% url 'admin:recalculate-priorities' %}" class="button" style="background-color: #417690; color: white; padding: 8px 12px; margin-right: 10px;">
+        <div class="button-section">
+            <h3 class="section-title">{% trans 'System Tools' %}</h3>
+            <a href="{% url 'admin:recalculate-priorities' %}" class="admin-button primary-button">
                 {% trans 'Перерахувати пріоритети' %}
             </a>
-            <a href="{% url 'admin:api-usage-stats' %}" class="button" style="background-color: #f0f0f0; color: #333; padding: 8px 12px; margin-right: 10px; border: 1px solid #ccc;">
+            <a href="{% url 'admin:api-usage-stats' %}" class="admin-button info-button">
                 {% trans 'API статистика' %}
             </a>
-            <a href="{% url 'admin:update-stats' %}" class="button" style="background-color: #f0f0f0; color: #333; padding: 8px 12px; margin-right: 10px; border: 1px solid #ccc;">
+            <a href="{% url 'admin:update-stats' %}" class="admin-button info-button">
                 {% trans 'Статистика оновлень' %}
             </a>
         </div>

@@ -1,0 +1,530 @@
+/* Dark theme for Django admin */
+:root {
+  --primary: #1e2124;
+  --secondary: #282c34;
+  --accent: #5294b2;  /* менш кислотний синій */
+  --primary-fg: #e5e9ed;  /* світліший білий для кращого контрасту */
+  --body-bg: #121212;
+  --body-fg: #e5e9ed;
+  --body-quiet-color: #bbc0c7;  /* світліший сірий для кращої читабельності */
+  --body-loud-color: #fff;
+  --header-color: #5294b2;  /* узгоджено з accent */
+  --header-branding-color: #fff;
+  --link-fg: #64a9c9;  /* м'якіший синій для посилань */
+  --link-hover-color: #8cc1db;
+  --link-selected-fg: #64a9c9;
+  --hairline-color: #3a3f44;  /* темніший, але не занадто темний */
+  --border-color: #3a3f44;
+  --error-fg: #e86671;  /* менш яскравий червоний */
+  --message-success-bg: #133a1b;
+  --message-warning-bg: #4d360f;
+  --message-error-bg: #4c131a;
+  --darkened-bg: #1a1d21;
+  --selected-bg: #2d4a5b;
+  --selected-row: #23404e;
+  --close-button-bg: #383e45;
+  --close-button-hover-bg: #4e545d;
+}
+
+/* Main background */
+body {
+  background-color: var(--body-bg);
+  color: var(--body-fg);
+}
+
+/* Header */
+#header {
+  background: var(--primary);
+  color: var(--header-branding-color);
+}
+
+#site-name a {
+  color: var(--header-branding-color);
+}
+
+/* Breadcrumbs */
+div.breadcrumbs {
+  background: var(--secondary);
+  color: var(--body-quiet-color);
+}
+
+div.breadcrumbs a {
+  color: var(--header-color);
+}
+
+div.breadcrumbs a:hover {
+  color: var(--link-hover-color);
+}
+
+/* Links */
+a:link, a:visited {
+  color: var(--link-fg);
+}
+
+a:focus, a:hover {
+  color: var(--link-hover-color);
+}
+
+/* Modules */
+.module {
+  background-color: var(--darkened-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.module h2, .module caption {
+  background: var(--secondary);
+  color: var(--body-fg);
+}
+
+/* Tables */
+.form-row {
+  border-bottom: 1px solid var(--border-color);
+}
+
+thead th {
+  background: var(--secondary);
+  color: var(--body-fg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+tbody tr:nth-child(odd) {
+  background: var(--darkened-bg);
+}
+
+tbody tr:nth-child(even) {
+  background: var(--primary);
+}
+
+table tbody tr.selected {
+  background-color: var(--selected-row);
+}
+
+/* Form Controls */
+input, textarea, select, .form-row p, form .button {
+  background-color: #2c3036;
+  color: var(--body-fg);
+  border: 1px solid var(--border-color);
+}
+
+.button, input[type=submit], input[type=button], .submit-row input, a.button {
+  background: var(--secondary);
+  color: var(--primary-fg);
+  border: 1px solid var(--border-color);
+}
+
+.button:hover, input[type=submit]:hover, input[type=button]:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.button.default, input[type=submit].default {
+  background: var(--accent);
+}
+
+.button.default:hover, input[type=submit].default:hover {
+  background: var(--link-hover-color);
+}
+
+/* Sidebar */
+.module.filtered h2 {
+  border-bottom-color: var(--border-color);
+}
+
+/* Paginator */
+.paginator a, .paginator .this-page {
+  background: var(--secondary);
+  color: var(--primary-fg);
+}
+
+.paginator a:hover {
+  background: var(--accent);
+}
+
+.paginator .this-page {
+  background: var(--accent);
+}
+
+/* Login form */
+.login .form-row {
+  border: none;
+}
+
+/* Custom styles for API stats and update stats */
+.stat-card {
+  background-color: var(--darkened-bg) !important;
+  color: var(--body-fg) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.stat-value {
+  color: var(--header-color) !important;
+}
+
+.stat-title {
+  color: var(--body-quiet-color) !important;
+  font-weight: 500 !important;
+}
+
+.progress-bar {
+  background-color: var(--primary) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.progress-bar .progress {
+  background-color: var(--accent) !important;
+}
+
+.updates-table th, 
+.requests-table th {
+  background-color: var(--secondary) !important;
+  color: var(--body-fg) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  font-weight: 500 !important;
+}
+
+.updates-table td,
+.requests-table td {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.updates-table tr:nth-child(odd),
+.requests-table tr:nth-child(odd) {
+  background-color: var(--darkened-bg) !important;
+}
+
+.updates-table tr:nth-child(even),
+.requests-table tr:nth-child(even) {
+  background-color: var(--primary) !important;
+}
+
+.type-stat {
+  background-color: var(--darkened-bg) !important;
+  color: var(--body-fg) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+}
+
+.success {
+  color: #7cc986 !important; /* менш яскравий зелений */
+}
+
+.error {
+  color: #e86671 !important; /* менш яскравий червоний */
+}
+
+.daily-chart {
+  background: var(--darkened-bg) !important;
+  color: var(--body-fg) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.chart-bar {
+  background: var(--accent) !important;
+}
+
+/* Forms */
+.inline-group {
+  background: var(--darkened-bg);
+  border: 1px solid var(--border-color);
+}
+
+fieldset.collapsed h2 {
+  background: var(--secondary);
+  color: var(--body-fg);
+}
+
+.aligned label {
+  color: var(--body-quiet-color);
+}
+
+/* Messages */
+ul.messagelist li {
+  background: var(--darkened-bg);
+  color: var(--body-fg);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Dashboard */
+.dashboard .module table th {
+  background-color: var(--secondary);
+  color: var(--body-fg);
+}
+
+/* Date & Time */
+.calendarbox, .clockbox {
+  background: var(--darkened-bg);
+  color: var(--body-fg);
+  border: 1px solid var(--border-color);
+}
+
+.calendar td a:hover {
+  background: var(--accent);
+}
+
+.calendar td a:focus, .timelist a:focus,
+.calendar td a:hover, .timelist a:hover {
+  background: var(--accent);
+  color: white;
+}
+
+/* Dark mode improvements for Japanese text */
+td.field-display_japanese_title span[lang="ja"] {
+  text-shadow: 0 0 0.5px rgba(255,255,255,0.3);
+}
+
+/* Buttons on anime changelist page */
+.button[style*="background-color: #417690"] {
+  background-color: #345a69 !important;
+}
+
+.button[style*="background-color: #79aec8"] {
+  background-color: #4e8aa3 !important;
+}
+
+.button[style*="background-color: #f0f0f0"] {
+  background-color: #383e45 !important;
+  color: #e5e9ed !important;
+  border: 1px solid #4e5560 !important;
+}
+
+/* Fix code display in admin */
+.vLargeTextField, .vTextField {
+  background-color: #2c3036;
+  color: #e5e9ed;
+  font-family: 'Consolas', 'Monaco', monospace;
+  border: 1px solid var(--border-color);
+}
+
+pre, .prismjs {
+  background-color: #282c34 !important;
+  color: #abb2bf !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 3px !important;
+}
+
+/* Improve table display */
+.results {
+  background: var(--darkened-bg);
+  border: 1px solid var(--border-color);
+}
+
+/* Filter sidebar */
+#changelist-filter {
+  background: var(--darkened-bg);
+  border-left: 1px solid var(--border-color);
+}
+
+#changelist-filter h2 {
+  background: var(--secondary);
+  color: var(--body-fg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+#changelist-filter h3 {
+  color: var(--body-fg);
+}
+
+#changelist-filter ul {
+  border-bottom: 1px solid var(--border-color);
+}
+
+#changelist-filter li.selected {
+  background: var(--selected-bg);
+}
+
+#changelist-filter li.selected a {
+  color: white !important;
+}
+
+#changelist-filter a {
+  color: var(--link-fg);
+}
+
+#changelist-filter a:hover {
+  color: var(--link-hover-color);
+}
+
+/* Selection popup window */
+.selector {
+  background: var(--darkened-bg);
+}
+
+.selector h2 {
+  background: var(--secondary);
+  color: var(--body-fg);
+}
+
+.selector .selector-available h2, .selector .selector-chosen h2 {
+  background: var(--secondary);
+  color: var(--body-fg);
+  border: 1px solid var(--border-color);
+}
+
+.selector .selector-filter {
+  background: var(--darkened-bg);
+  border: 1px solid var(--border-color);
+}
+
+/* Fix related widget */
+.related-widget-wrapper {
+  background-color: var(--darkened-bg);
+}
+
+/* Admin panel buttons */
+.admin-panel-buttons .button-section {
+  background-color: rgba(48, 54, 61, 0.4) !important;
+  border: 1px solid var(--border-color) !important;
+  padding: 15px !important;
+  margin-bottom: 15px !important;
+}
+
+.admin-panel-buttons .section-title {
+  color: var(--body-fg) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  padding-bottom: 5px !important;
+  margin-bottom: 10px !important;
+}
+
+.admin-panel-buttons .primary-button {
+  background-color: var(--accent) !important;
+  color: white !important;
+}
+
+.admin-panel-buttons .secondary-button {
+  background-color: #3d4550 !important;
+  color: var(--primary-fg) !important;
+}
+
+.admin-panel-buttons .info-button {
+  background-color: var(--darkened-bg) !important;
+  color: var(--body-quiet-color) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+/* Fix select2 widget if used */
+.select2-container--default .select2-selection--single,
+.select2-container--default .select2-selection--multiple {
+  background-color: var(--darkened-bg) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.select2-container--default .select2-results__option--highlighted[aria-selected] {
+  background-color: var(--selected-bg) !important;
+}
+
+.select2-dropdown {
+  background-color: var(--darkened-bg) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.select2-container--default .select2-results__option[aria-selected=true] {
+  background-color: var(--selected-row) !important;
+}
+
+/* Rate limited background */
+.rate-limited {
+  background-color: var(--message-error-bg) !important;
+  color: #ffaaaa !important;
+  border: 1px solid #7d262f !important;
+}
+
+/* Field descriptions */
+.help {
+  color: var(--body-quiet-color) !important;
+}
+
+/* Chart bar labels */
+.chart-bar-label, .chart-bar-value {
+  color: var(--body-quiet-color) !important;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.7) !important;
+  font-weight: 500 !important;
+}
+
+/* Fix inline forms */
+.inline-related h3 {
+  background: var(--secondary) !important;
+  color: var(--body-fg) !important;
+  padding: 8px 12px !important;
+  border-radius: 3px !important;
+}
+
+.inline-group .tabular tr.has_original td {
+  background-color: var(--darkened-bg) !important;
+}
+
+.inline-group .tabular tr.has_original td.original {
+  background-color: var(--primary) !important;
+}
+
+/* Improve form widgets */
+.field-title_ukrainian textarea,
+.field-description textarea,
+.field-text textarea {
+  min-height: 100px !important;
+  font-family: 'Roboto', 'Noto Sans', sans-serif !important;
+}
+
+/* Fix tabs (if any) */
+.submit-row {
+  background: var(--primary) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+/* Fix Django's default styles for action buttons */
+.object-tools a {
+  background: var(--secondary) !important;
+  color: var(--primary-fg) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.object-tools a:hover {
+  background: var(--selected-bg) !important;
+}
+
+/* Fix admin action dropdown */
+.actions {
+  background: var(--primary) !important;
+  color: var(--body-fg) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.action-counter {
+  color: var(--body-quiet-color) !important;
+}
+
+/* Fix scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--darkened-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Fix sticky position elements */
+thead th.sorted {
+  background-color: var(--selected-bg) !important;
+}
+
+/* Fix filter chip */
+.datetimeshortcuts a {
+  color: var(--link-fg) !important;
+}
+
+.datetimeshortcuts a:hover {
+  color: var(--link-hover-color) !important;
+}

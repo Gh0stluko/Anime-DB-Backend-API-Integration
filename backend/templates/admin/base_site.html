@@ -10,6 +10,8 @@
 {% block extrahead %}
 {{ block.super }}
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="{% static 'admin/css/dark_theme.css' %}" rel="stylesheet">
+<script src="{% static 'admin/js/dark_theme_toggle.js' %}"></script>
 <style>
     /* Ensure proper display of Japanese text */
     @charset "UTF-8";
@@ -32,10 +34,21 @@
     }
     
     /* Dark mode better visibility for Japanese text */
-    @media (prefers-color-scheme: dark) {
-        td.field-display_japanese_title span[lang="ja"] {
-            text-shadow: 0 0 0.5px rgba(255,255,255,0.2);
-        }
+    td.field-display_japanese_title span[lang="ja"] {
+        text-shadow: 0 0 0.5px rgba(255,255,255,0.2);
+    }
+    
+    /* Theme toggle styling */
+    #theme-toggle {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 3px;
+        background-color: rgba(0, 0, 0, 0.2);
+        transition: background-color 0.3s ease;
+    }
+    
+    #theme-toggle:hover {
+        background-color: rgba(0, 0, 0, 0.3);
     }
 </style>
 {% endblock %}
