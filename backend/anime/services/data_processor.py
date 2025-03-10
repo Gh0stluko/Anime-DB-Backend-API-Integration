@@ -23,17 +23,21 @@ class AnimeProcessor:
         if not title:
             return ""
             
-        # Для японских названий не удаляем иероглифы
+        # Для японських названий не видаляємо ієрогліфи
         if any('\u3040' <= c <= '\u30ff' or '\u3400' <= c <= '\u4dbf' or '\u4e00' <= c <= '\u9fff' for c in title):
-            # Только обрезаем длину для японских названий, не фильтруя символы
+            # Тільки обрізаємо довжину для японських назв, не фільтруючи символи
             return title[:250] if len(title) > 250 else title
             
-        # Для не-японских названий применяем фильтрацию проблемных символов
+        # Для не-японських назв застосовуємо фільтрацію проблемних символів
         cleaned_title = re.sub(r'[^\w\s\-_.,:;()\[\]{}]', '', title)
         return cleaned_title[:250] if len(cleaned_title) > 250 else cleaned_title
     
-    @staticmethod
-    def fetch_and_process_combined(mal_id=None, page=1, limit=25, mode="top"):
+    @classmethod
+    def fetch_and_process_combined(cls, page=1, limit=25, mode="top", mal_id=None, year=None, season=None):
+        """Fetch and process anime data from multiple sources"""
+        # Переконуємося, що limit не перевищує обмеження API
+        limit = min(limit, 25)  # Jikan API підтримує максимум 25
+        
         """
         Fetch anime data from both Jikan and Anilist APIs and combine the results
         
@@ -177,7 +181,7 @@ class AnimeProcessor:
         anime.title_original = data['title']
         anime.title_english = data.get('title_english', '')
         
-        # Для японских названий не применяем clean_title, чтобы сохранить иероглифы
+        # Для японських назв не застосовуємо clean_title, щоб зберегти ієрогліфи
         if data.get('title_japanese'):
             anime.title_japanese = data.get('title_japanese', '')
         

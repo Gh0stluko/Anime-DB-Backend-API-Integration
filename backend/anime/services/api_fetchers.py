@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 class JikanAPIFetcher:
     """Service for fetching anime data from Jikan API (MyAnimeList)"""
     BASE_URL = "https://api.jikan.moe/v4"
+    MAX_LIMIT = 25  # Додано константу для максимального ліміту
     
     def __init__(self):
         self.session = requests.Session()
@@ -19,6 +20,9 @@ class JikanAPIFetcher:
     @rate_limited(api_name="Jikan")
     def fetch_top_anime(self, page=1, limit=25, retries=3, delay=2):
         """Fetch top anime from Jikan API"""
+        # Обмежуємо limit максимальним значенням
+        limit = min(limit, self.MAX_LIMIT)
+        
         url = f"{self.BASE_URL}/top/anime?page={page}&limit={limit}"
         logger.info(f"Fetching top anime from URL: {url}")
         print(f"DEBUG: Requesting {url}")

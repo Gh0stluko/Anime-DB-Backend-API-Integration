@@ -475,3 +475,134 @@ def reschedule_updates_task(self):
         logger.error(f"Error in reschedule_updates_task: {str(ex)}")
         logger.error(traceback.format_exc())
         return f"Error: {str(ex)}"
+
+@shared_task(name="test_celery_task")
+def test_celery_task():
+    """Тестове завдання для перевірки роботи Celery"""
+    logger.info("Починаємо виконання тестового завдання Celery...")
+    
+    # Імітація тривалої роботи
+    time.sleep(2)
+    
+    logger.info("Тестове завдання Celery успішно виконано!")
+    return {"status": "success", "message": "Тестове завдання виконано успішно!"}
+
+@shared_task(bind=True)
+def force_update_scheduled_anime_task(self, anime_ids=None, update_type='full'):
+    """
+    Задача для примусового оновлення аніме, які вже заплановані на оновлення.
+    
+    Args:
+        anime_ids: Список ID аніме для оновлення. Якщо None, оновлюються всі заплановані аніме.
+        update_type: Тип оновлення ('full', 'metadata', 'episodes', 'images').
+    
+    Returns:
+        Результат оновлення.
+    """
+    logger.info(f"Примусове оновлення аніме (IDs: {anime_ids}, тип: {update_type})")
+    
+    try:
+        if anime_ids:
+            # Оновлення конкретних аніме за ID
+            anime_list = Anime.objects.filter(id__in=anime_ids)
+            logger.info(f"Знайдено {anime_list.count()} аніме за ID")
+        else:
+            # Оновлення всіх аніме, які вже заплановані (next_update_scheduled <= now)
+            now = timezone.now()
+            anime_list = Anime.objects.filter(next_update_scheduled__lte=now)
+            logger.info(f"Знайдено {anime_list.count()} запланованих аніме для оновлення")
+        
+        if not anime_list.exists():
+            return "Не знайдено аніме для оновлення"
+        
+        # Використовуємо існуючу задачу оновлення для кожного аніме
+        updated_count = 0
+        failed_count = 0
+        
+        # Ініціалізація API клієнтів
+        jikan_fetcher = JikanAPIFetcher()
+        anilist_fetcher = AnilistAPIFetcher()
+        
+        for anime in anime_list:
+            try:
+                logger.info(f"Оновлюємо аніме: {anime.title_ukrainian} (ID: {anime.id})")
+                
+                # Перевірка наявності MAL ID
+                if not anime.mal_id:
+                    logger.warning(f"Аніме {anime.title_ukrainian} не має MAL ID. Пропускаємо.")
+                    failed_count += 1
+                    continue
+                
+                # Перевірка лімітів API
+                if APIRateLimiter.check_rate_limit("Jikan") or APIRateLimiter.check_rate_limit("Anilist"):
+                    logger.warning("Досягнуто лімітів API. Призупиняємо оновлення.")
+                    break
+                
+                # Отримання даних з API
+                jikan_data = jikan_fetcher.fetch_anime_details(anime.mal_id)
+                anilist_data = anilist_fetcher.fetch_anime_by_id(anime.mal_id)
+                
+                if not jikan_data and not anilist_data:
+                    logger.error(f"Не вдалося отримати дані для {anime.title_ukrainian}")
+                    UpdateScheduler.record_update_attempt(
+                        anime=anime,
+                        update_type=update_type,
+                        success=False,
+                        error_message="Не вдалося отримати дані з API"
+                    )
+                    failed_count += 1
+                    continue
+                
+                # Оновлення аніме відповідно до типу оновлення
+                success = False
+                
+                if update_type == 'full':
+                    updated_anime = AnimeProcessor.process_combined_anime(jikan_data, anilist_data)
+                    if updated_anime:
+                        success = True
+                elif update_type == 'metadata':
+                    if jikan_data:
+                        AnimeProcessor._apply_jikan_data(anime, jikan_data)
+                    if anilist_data:
+                        AnimeProcessor._enhance_with_anilist_data(anime, anilist_data)
+                    anime.save()
+                    success = True
+                elif update_type == 'episodes':
+                    AnimeProcessor._process_episodes(anime, jikan_data, anilist_data)
+                    success = True
+                elif update_type == 'images':
+                    ImageService.process_screenshots(anime, jikan_data, anilist_data)
+                    success = True
+                
+                # Запис результату оновлення
+                UpdateScheduler.record_update_attempt(
+                    anime=anime,
+                    update_type=update_type,
+                    success=success,
+                    error_message="" if success else "Помилка обробки даних"
+                )
+                
+                if success:
+                    updated_count += 1
+                else:
+                    failed_count += 1
+                
+                # Затримка для запобігання перевантаженню API
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.error(f"Помилка оновлення аніме {anime.title_ukrainian}: {str(e)}")
+                UpdateScheduler.record_update_attempt(
+                    anime=anime,
+                    update_type=update_type,
+                    success=False,
+                    error_message=str(e)
+                )
+                failed_count += 1
+        
+        return f"Успішно оновлено {updated_count} аніме, невдалих оновлень: {failed_count}"
+    
+    except Exception as ex:
+        logger.error(f"Непередбачена помилка в force_update_scheduled_anime_task: {str(ex)}")
+        logger.error(traceback.format_exc())
+        return f"Помилка: {str(ex)}"

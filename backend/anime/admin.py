@@ -187,6 +187,9 @@ class AnimeAdmin(admin.ModelAdmin):
             path('recalculate_priorities/', self.admin_site.admin_view(self.recalculate_priorities), name='recalculate-priorities'),
             path('api_usage_stats/', self.admin_site.admin_view(self.api_usage_stats), name='api-usage-stats'),
             path('update_stats/', self.admin_site.admin_view(self.update_stats), name='update-stats'),
+            path('force-update-scheduled/',
+                 self.admin_site.admin_view(self.force_update_scheduled),
+                 name='force-update-scheduled'),
         ]
         return custom_urls + urls
     
@@ -513,6 +516,19 @@ class AnimeAdmin(admin.ModelAdmin):
             return mark_safe(f'<span lang="ja" style="font-family: \'Noto Sans JP\', sans-serif;">{obj.title_japanese}</span>')
         return "-"
     display_japanese_title.short_description = 'Японська назва'
+    
+    def force_update_scheduled(self, request):
+        """Запуск примусового оновлення запланованих аніме"""
+        from anime.tasks import force_update_scheduled_anime_task
+        
+        task = force_update_scheduled_anime_task.delay()
+        
+        self.message_user(
+            request,
+            f"Задачу примусового оновлення запланованих аніме запущено. ID завдання: {task.id}",
+            messages.SUCCESS
+        )
+        return HttpResponseRedirect("../")
     
     class Media:
         css = {

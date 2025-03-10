@@ -54,3 +54,14 @@ def at_worker_ready(sender, **k):
 @app.task(bind=True)
 def debug_task(self):
     print(f'Request: {self.request!r}')
+
+@app.on_after_configure.connect
+def setup_periodic_tasks(sender, **kwargs):
+    # ...existing scheduled tasks...
+    
+    # Примусове оновлення запланованих аніме кожні 12 годин
+    sender.add_periodic_task(
+        crontab(hour='*/12'),  # Кожні 12 годин
+        'anime.tasks.force_update_scheduled_anime_task',
+        name='force-update-scheduled-anime'
+    )
