@@ -1,10 +1,13 @@
-# 🌸 Anime Platform
+# 🌸 Anime DB parser from API
 
-![Ліцензія](https://img.shields.io/badge/license-MIT-green.svg)
 ![Python](https://img.shields.io/badge/Python-3.13-blue.svg)
 ![Django](https://img.shields.io/badge/Django-5.1-blue.svg)
 
-Платформа для перегляду аніме та манги з українською озвучкою, розроблена на Django з інтеграцією зовнішніх API та розумною системою оновлення даних.
+Бекенд/збирач бази данних та початкова точка вашого проекту. 
+
+Що це таке?
+
+Це бекенд, який бере інформацію з jikan/anilist api та інтегрує в вашу базу данних.
 
 <div align="center">
     <img src="docs/images/preview.png" alt="Anime Platform Preview" width="800"/>
@@ -23,8 +26,7 @@
 
 - **Backend**: Django 5.1, Django REST Framework
 - **База даних**: PostgreSQL
-- **Кешування та черги**: Redis, Celery
-- **Пошук**: Elasticsearch
+- **Черги**: Celery
 - **Контейнеризація**: Docker, Docker Compose
 
 ## 🚀 Запуск проекту
